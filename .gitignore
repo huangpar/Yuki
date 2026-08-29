@@ -1,0 +1,29 @@
+# SSH keys and credentials
+accessskey
+accessskey.pub
+
+# Environment variables
+.env
+.env.local
+
+# Dependencies
+node_modules/
+__pycache__/
+
+# Build artifacts
+dist/
+build/
+*.o
+*.a
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
