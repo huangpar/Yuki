@@ -10,6 +10,9 @@ class CustomerBooking {
   final DateTime? createdAt;
   final DateTime? expiresAt;
 
+  /// When the provider said they'd get there, set when they accept.
+  final DateTime? estimatedArrivalAt;
+
   CustomerBooking({
     required this.id,
     required this.status,
@@ -21,6 +24,7 @@ class CustomerBooking {
     this.price,
     this.createdAt,
     this.expiresAt,
+    this.estimatedArrivalAt,
   });
 
   bool get isPending => status == 'pending_acceptance';
@@ -62,6 +66,7 @@ class CustomerBooking {
       price: (json['price'] as num?)?.toDouble(),
       createdAt: _parseDate(json['created_at']),
       expiresAt: _parseDate(json['expires_at']),
+      estimatedArrivalAt: _parseDate(json['estimated_arrival_at']),
     );
   }
 }

@@ -142,6 +142,7 @@ class _BookingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final when = booking.scheduledFor;
     final price = booking.price;
+    final arrival = booking.status == 'accepted' ? booking.estimatedArrivalAt : null;
     final details = [
       categoryLabel(booking.serviceCategory),
       if (when != null) booking.isAsap ? 'ASAP' : formatWhen(context, when),
@@ -171,6 +172,16 @@ class _BookingTile extends StatelessWidget {
                       details,
                       style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
                     ),
+                    if (arrival != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Arriving around ${formatArrival(context, arrival)}',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     if (price != null) ...[
                       const SizedBox(height: AppSpacing.xs),
                       Text(

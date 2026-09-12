@@ -266,10 +266,16 @@ export const schemas = {
   },
 
   acceptBooking: {
-    estimated_arrival_minutes: {
-      type: 'integer',
-      min: 1,
-      max: 180,
+    estimated_arrival_at: {
+      type: 'date',
+      required: true,
+      custom: (value) => {
+        // A few minutes of slack for clock drift between the provider's device and the server
+        if (new Date(value) < new Date(Date.now() - 5 * 60 * 1000)) {
+          return 'Arrival time must be in the future';
+        }
+        return null;
+      },
     },
   },
 

@@ -356,8 +356,10 @@ class SupabaseService {
         .toList();
   }
 
-  Future<void> acceptBooking(String bookingId) async {
-    await _request('POST', '/bookings/$bookingId/accept', {});
+  Future<void> acceptBooking(String bookingId, {required DateTime arrivingAt}) async {
+    await _request('POST', '/bookings/$bookingId/accept', {
+      'estimated_arrival_at': _isoSeconds(arrivingAt),
+    });
   }
 
   Future<void> declineBooking(String bookingId) async {

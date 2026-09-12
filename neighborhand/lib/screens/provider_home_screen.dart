@@ -8,6 +8,7 @@ import '../constants/service_categories.dart';
 import '../models/provider_account.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/formatters.dart' show formatArrival;
 import 'home_screen.dart';
 import 'provider_profile_screen.dart';
 
@@ -123,9 +124,10 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
         _api.getProviderBookings('accepted'),
       ]);
       if (!mounted) return;
+      final upcoming = results[1]..sort((a, b) => a.endsAt().compareTo(b.endsAt()));
       setState(() {
         _requests = results[0];
-        _upcoming = results[1];
+        _upcoming = upcoming;
       });
     } catch (_) {
       // Transient; the next poll retries.
@@ -213,17 +215,42 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     }
   }
 
+  /// When the jobs already accepted should be wrapped up, or null if nothing is ahead.
+  DateTime? _busyUntil() {
+    final now = DateTime.now();
+    DateTime? latest;
+    for (final job in _upcoming) {
+      final end = job.endsAt();
+      if (end.isAfter(now) && (latest == null || end.isAfter(latest))) latest = end;
+    }
+    return latest;
+  }
+
   Future<void> _respond(ProviderBooking request, {required bool accept}) async {
+    DateTime? arrivingAt;
+    if (accept) {
+      arrivingAt = await showDialog<DateTime>(
+        context: context,
+        builder: (_) => _ArrivalTimeDialog(request: request, busyUntil: _busyUntil()),
+      );
+      if (arrivingAt == null || !mounted) return;
+    }
+
     setState(() => _responding.add(request.id));
     try {
-      if (accept) {
-        await _api.acceptBooking(request.id);
+      if (arrivingAt != null) {
+        await _api.acceptBooking(request.id, arrivingAt: arrivingAt);
       } else {
         await _api.declineBooking(request.id);
       }
       if (!mounted) return;
       setState(() => _requests.removeWhere((r) => r.id == request.id));
-      _showMessage(accept ? 'Request accepted.' : 'Request declined.');
+      _showMessage(
+        arrivingAt != null
+            ? 'Accepted. ${request.customerName} will see you\'re arriving around '
+                '${formatArrival(context, arrivingAt)}.'
+            : 'Request declined.',
+      );
       if (accept) _loadBookings();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -684,6 +711,7 @@ class _BookingCard extends StatelessWidget {
       if (duration != null) _formatDuration(duration),
     ].join(' · ');
     final description = booking.description;
+    final arrival = booking.estimatedArrivalAt;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -710,6 +738,11 @@ class _BookingCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.xs),
           Text(booking.customerName, style: AppTypography.bodyMedium),
           if (schedule.isNotEmpty) _BookingDetail(icon: Icons.schedule, text: schedule),
+          if (arrival != null)
+            _BookingDetail(
+              icon: Icons.directions_car_outlined,
+              text: 'You said you\'d arrive ${formatArrival(context, arrival)}',
+            ),
           if (booking.address != null)
             _BookingDetail(icon: Icons.place_outlined, text: booking.address!),
           if (description != null && description.isNotEmpty) ...[
@@ -750,6 +783,139 @@ class _BookingDetail extends StatelessWidget {
           Expanded(child: Text(text, style: AppTypography.bodyMedium)),
         ],
       ),
+    );
+  }
+}
+
+/// Asks the provider when they'll arrive before accepting. Pops with the chosen time.
+class _ArrivalTimeDialog extends StatefulWidget {
+  final ProviderBooking request;
+
+  /// When the provider's already-accepted jobs should be done, if any are ahead.
+  final DateTime? busyUntil;
+
+  const _ArrivalTimeDialog({required this.request, required this.busyUntil});
+
+  @override
+  State<_ArrivalTimeDialog> createState() => _ArrivalTimeDialogState();
+}
+
+class _ArrivalTimeDialogState extends State<_ArrivalTimeDialog> {
+  late final DateTime? _requestedTime = widget.request.isAsap ? null : widget.request.scheduledFor;
+  late final List<DateTime> _suggestions = _buildSuggestions();
+  late DateTime _selected = _suggestions.first;
+  DateTime? _customTime;
+
+  List<DateTime> _buildSuggestions() {
+    final now = DateTime.now();
+    final busyUntil = widget.busyUntil;
+    final earliest = busyUntil != null && busyUntil.isAfter(now) ? busyUntil : now;
+    final requested = _requestedTime;
+    return [
+      if (requested != null && !requested.isBefore(earliest)) requested,
+      for (final minutes in const [15, 30, 60]) _roundUp(earliest.add(Duration(minutes: minutes))),
+    ];
+  }
+
+  static DateTime _roundUp(DateTime time) {
+    final extra = (5 - time.minute % 5) % 5;
+    return DateTime(time.year, time.month, time.day, time.hour, time.minute + extra);
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selected),
+    );
+    if (picked == null || !mounted) return;
+    final base = _requestedTime ?? DateTime.now();
+    var time = DateTime(base.year, base.month, base.day, picked.hour, picked.minute);
+    if (time.isBefore(DateTime.now())) time = time.add(const Duration(days: 1));
+    setState(() {
+      _customTime = time;
+      _selected = time;
+    });
+  }
+
+  String _label(DateTime time) {
+    final clock = formatArrival(context, time);
+    if (time == _requestedTime) return 'As requested · $clock';
+    final minutes = time.difference(DateTime.now()).inMinutes;
+    return minutes < 1 ? clock : '$clock · in ${_formatDuration(minutes)}';
+  }
+
+  Widget _chip(DateTime time) {
+    return ChoiceChip(
+      label: Text(_label(time)),
+      selected: time == _selected,
+      onSelected: (_) => setState(() => _selected = time),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final busyUntil = widget.busyUntil;
+    final requested = _requestedTime;
+    final customTime = _customTime;
+    final runsLate = requested != null && _selected.isAfter(requested);
+
+    return AlertDialog(
+      title: const Text('When will you be there?'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${widget.request.customerName} will see this time on their booking.',
+              style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+            ),
+            if (busyUntil != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _BookingDetail(
+                icon: Icons.work_history_outlined,
+                text: 'Your accepted jobs should wrap up around '
+                    '${formatArrival(context, busyUntil)}.',
+              ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (final time in _suggestions) _chip(time),
+                if (customTime != null && !_suggestions.contains(customTime)) _chip(customTime),
+                ActionChip(
+                  avatar: const Icon(Icons.schedule, size: 18),
+                  label: const Text('Other time'),
+                  onPressed: _pickTime,
+                ),
+              ],
+            ),
+            if (runsLate) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'They asked for ${formatArrival(context, requested)}, so you\'d be later than requested.',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.accentDark,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(_selected),
+          child: const Text('Accept'),
+        ),
+      ],
     );
   }
 }

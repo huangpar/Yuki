@@ -22,6 +22,13 @@ String formatWhen(BuildContext context, DateTime when) {
   return '${_months[when.month - 1]} ${when.day}, $time';
 }
 
+/// "3:45 PM" for later today, otherwise the same as [formatWhen].
+String formatArrival(BuildContext context, DateTime time) {
+  final now = DateTime.now();
+  final today = time.year == now.year && time.month == now.month && time.day == now.day;
+  return today ? TimeOfDay.fromDateTime(time).format(context) : formatWhen(context, time);
+}
+
 /// "30 min", "1 hr", "3 hrs", or "1 hr 30 min".
 String formatDuration(int minutes) {
   final hours = minutes ~/ 60;

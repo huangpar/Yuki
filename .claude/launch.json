@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "yuki-web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/parkerhuang/Desktop/projects/Yuki/neighborhand && flutter run --release -d web-server --web-port 8000 --web-hostname localhost"],
+      "port": 8000
+    },
+    {
+      "name": "yuki-api",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/parkerhuang/Desktop/projects/Yuki/backend && NODE_OPTIONS=--experimental-websocket npm run dev"],
+      "port": 3000
+    }
+  ]
+}

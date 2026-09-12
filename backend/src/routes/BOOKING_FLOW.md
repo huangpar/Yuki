@@ -309,7 +309,7 @@ Authorization: Bearer {access_token}
 **Request:**
 ```json
 {
-  "estimated_arrival_minutes": 15
+  "estimated_arrival_at": "2026-09-09T11:30:00Z"
 }
 ```
 
@@ -319,13 +319,15 @@ Authorization: Bearer {access_token}
   "booking_id": "booking-uuid",
   "status": "accepted",
   "accepted_at": "2026-09-09T10:05:00Z",
-  "estimated_arrival_minutes": 15,
+  "estimated_arrival_at": "2026-09-09T11:30:00Z",
   "next_step": "en_route"
 }
 ```
 
 **Validation:**
-- estimated_arrival_minutes: 1-180 minutes
+- estimated_arrival_at: required, `YYYY-MM-DDTHH:MM:SSZ`, not in the past (5 minutes of slack for clock drift)
+
+A provider can accept a request while other accepted jobs are still ahead of them. The arrival time is how the customer knows when to expect them; it's returned as `estimated_arrival_at` on every booking read.
 
 **Errors:**
 - `401 Unauthorized` — Missing token
@@ -337,6 +339,7 @@ Authorization: Bearer {access_token}
 1. Updates booking_requests:
    - status: 'accepted'
    - accepted_at: now
+   - estimated_arrival_at: from the request
 2. **Real-time broadcast** — Customer is notified (provider accepted)
 3. Customer can now see provider's ETA
 4. Booking cannot be declined after acceptance
@@ -564,7 +567,7 @@ curl "http://localhost:3000/api/bookings/booking-uuid" \
 curl -X POST "http://localhost:3000/api/bookings/booking-uuid/accept" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "estimated_arrival_minutes": 15 }'
+  -d '{ "estimated_arrival_at": "2026-09-09T11:30:00Z" }'
 ```
 
 ### Decline Booking
