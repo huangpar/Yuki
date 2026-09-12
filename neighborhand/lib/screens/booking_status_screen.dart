@@ -82,8 +82,11 @@ class _BookingStatusScreenState extends State<BookingStatusScreen> {
     } else if (_booking.status == 'accepted') {
       icon = Icons.check_circle;
       color = AppColors.success;
+      final arrival = _booking.estimatedArrivalAt;
       title = '$name accepted!';
-      message = '$name accepted your request.';
+      message = arrival == null
+          ? '$name accepted your request.'
+          : '$name will be there around ${formatArrival(context, arrival)}.';
     } else if (_booking.status == 'declined') {
       icon = Icons.event_busy;
       color = AppColors.textSecondary;
@@ -163,6 +166,7 @@ class _Summary extends StatelessWidget {
     final when = booking.scheduledFor;
     final duration = booking.durationMinutes;
     final price = booking.price;
+    final arrival = booking.estimatedArrivalAt;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -179,6 +183,8 @@ class _Summary extends StatelessWidget {
               label: 'When',
               value: booking.isAsap ? 'ASAP' : formatWhen(context, when),
             ),
+          if (arrival != null && booking.status == 'accepted')
+            _SummaryRow(label: 'Arriving', value: 'Around ${formatArrival(context, arrival)}'),
           if (duration != null) _SummaryRow(label: 'Duration', value: formatDuration(duration)),
           if (booking.address != null) _SummaryRow(label: 'Where', value: booking.address!),
           if (price != null)

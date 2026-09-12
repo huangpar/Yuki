@@ -55,6 +55,9 @@ class ProviderBooking {
   final DateTime? createdAt;
   final DateTime? expiresAt;
 
+  /// The arrival time the provider gave the customer when accepting.
+  final DateTime? estimatedArrivalAt;
+
   ProviderBooking({
     required this.id,
     required this.customerName,
@@ -66,6 +69,7 @@ class ProviderBooking {
     this.price,
     this.createdAt,
     this.expiresAt,
+    this.estimatedArrivalAt,
   });
 
   /// ASAP requests are scheduled for the moment they were sent.
@@ -94,7 +98,14 @@ class ProviderBooking {
       price: (json['price'] as num?)?.toDouble(),
       createdAt: _parseDate(json['created_at']),
       expiresAt: _parseDate(json['expires_at']),
+      estimatedArrivalAt: _parseDate(json['estimated_arrival_at']),
     );
+  }
+
+  /// When this job should be done: from the promised arrival (or requested time) plus its length.
+  DateTime endsAt() {
+    final start = estimatedArrivalAt ?? scheduledFor ?? DateTime.now();
+    return start.add(Duration(minutes: durationMinutes ?? 60));
   }
 }
 

@@ -170,6 +170,7 @@ router.get(
         created_at,
         expires_at,
         accepted_at,
+        estimated_arrival_at,
         completed_at,
         cancelled_at,
         profiles!provider_id (
@@ -219,6 +220,7 @@ router.get(
         created_at: b.created_at,
         expires_at: b.expires_at,
         accepted_at: b.accepted_at,
+        estimated_arrival_at: b.estimated_arrival_at,
         completed_at: b.completed_at,
         cancelled_at: b.cancelled_at,
       })),
@@ -260,6 +262,7 @@ router.get(
         created_at,
         expires_at,
         accepted_at,
+        estimated_arrival_at,
         completed_at,
         cancelled_at,
         profiles!customer_id (
@@ -317,6 +320,7 @@ router.get(
         created_at: b.created_at,
         expires_at: b.expires_at,
         accepted_at: b.accepted_at,
+        estimated_arrival_at: b.estimated_arrival_at,
         completed_at: b.completed_at,
         cancelled_at: b.cancelled_at,
       })),
@@ -355,6 +359,7 @@ router.get(
         created_at,
         expires_at,
         accepted_at,
+        estimated_arrival_at,
         completed_at,
         cancelled_at
       `
@@ -392,6 +397,7 @@ router.get(
       created_at: booking.created_at,
       expires_at: booking.expires_at,
       accepted_at: booking.accepted_at,
+      estimated_arrival_at: booking.estimated_arrival_at,
       completed_at: booking.completed_at,
       cancelled_at: booking.cancelled_at,
     });
@@ -408,7 +414,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const providerId = req.user.id;
     const { booking_id } = req.params;
-    const { estimated_arrival_minutes } = req.body;
+    // Other accepted jobs may come first, so the provider tells the customer when to expect them
+    const estimatedArrivalAt = new Date(req.body.estimated_arrival_at).toISOString();
 
     // Get booking
     const { data: booking, error: getError } = await supabase
@@ -436,14 +443,15 @@ router.post(
     }
 
     // Update booking
-    const { data: updated, error: updateError } = await supabase
+    const acceptedAt = new Date().toISOString();
+    const { error: updateError } = await supabase
       .from('booking_requests')
       .update({
         status: 'accepted',
-        accepted_at: new Date().toISOString(),
+        accepted_at: acceptedAt,
+        estimated_arrival_at: estimatedArrivalAt,
       })
-      .eq('id', booking_id)
-      .select();
+      .eq('id', booking_id);
 
     if (updateError) {
       throw new ApiError(`Failed to accept booking: ${updateError.message}`, 500);
@@ -452,7 +460,7 @@ router.post(
     logger.info('Booking accepted', {
       bookingId: booking_id,
       providerId,
-      estimatedArrival: estimated_arrival_minutes,
+      estimatedArrivalAt,
     });
 
     // Log audit event
@@ -463,7 +471,7 @@ router.post(
         event_details: {
           booking_id,
           customer_id: booking.customer_id,
-          estimated_arrival_minutes,
+          estimated_arrival_at: estimatedArrivalAt,
         },
       },
     ]);
@@ -471,8 +479,8 @@ router.post(
     res.json({
       booking_id,
       status: 'accepted',
-      accepted_at: new Date().toISOString(),
-      estimated_arrival_minutes,
+      accepted_at: acceptedAt,
+      estimated_arrival_at: estimatedArrivalAt,
       next_step: 'en_route',
     });
   })

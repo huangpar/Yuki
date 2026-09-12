@@ -506,7 +506,7 @@ Accept a booking request.
 **Request:**
 ```json
 {
-  "estimated_arrival_minutes": 15
+  "estimated_arrival_at": "2026-09-08T14:15:00Z"
 }
 ```
 
@@ -520,7 +520,7 @@ Accept a booking request.
     "phone": "+1-206-555-1234",
     "address": "123 Main St, Sumner, WA"
   },
-  "estimated_arrival_minutes": 15,
+  "estimated_arrival_at": "2026-09-08T14:15:00Z",
   "accepted_at": "2026-09-08T13:35:00Z"
 }
 ```
