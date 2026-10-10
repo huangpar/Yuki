@@ -8,6 +8,62 @@ import { logger } from '../middleware/logger.js';
 
 const router = express.Router();
 
+// A job neither side closes out would sit at "accepted" forever, and reviews only
+// open once a booking is complete. So when a job is well past the time it should
+// have ended, we settle it ourselves the next time either side looks at their list.
+const AUTO_COMPLETE_GRACE_HOURS = 24;
+
+async function settleStaleBookings(column, userId) {
+  const graceMs = AUTO_COMPLETE_GRACE_HOURS * 60 * 60 * 1000;
+  // Cheap pre-filter in the database; the exact end time is worked out below.
+  const cutoff = new Date(Date.now() - graceMs).toISOString();
+
+  const { data, error } = await supabase
+    .from('booking_requests')
+    .select('id, scheduled_for, estimated_arrival_at, estimated_duration_minutes')
+    .eq(column, userId)
+    .eq('status', 'accepted')
+    .lt('scheduled_for', cutoff)
+    .limit(100);
+
+  if (error || !data?.length) return;
+
+  const now = Date.now();
+  const stale = data.filter((booking) => {
+    const start = new Date(booking.estimated_arrival_at ?? booking.scheduled_for).getTime();
+    if (Number.isNaN(start)) return false;
+    const end = start + (booking.estimated_duration_minutes ?? 60) * 60 * 1000;
+    return end + graceMs <= now;
+  });
+
+  if (!stale.length) return;
+
+  const ids = stale.map((booking) => booking.id);
+  const { error: updateError } = await supabase
+    .from('booking_requests')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .in('id', ids);
+
+  if (updateError) {
+    // Not worth failing the list over; it will be retried on the next read.
+    logger.warn('Could not auto-complete stale bookings', { message: updateError.message });
+    return;
+  }
+
+  logger.info('Bookings auto-completed', { bookingIds: ids, after: `${AUTO_COMPLETE_GRACE_HOURS}h` });
+}
+
+// Which of these bookings the signed-in user has already reviewed.
+async function myRatings(userId, bookings) {
+  if (bookings.length === 0) return new Map();
+  const { data } = await supabase
+    .from('reviews')
+    .select('booking_id, rating')
+    .eq('reviewer_id', userId)
+    .in('booking_id', bookings.map((b) => b.id));
+  return new Map((data ?? []).map((r) => [r.booking_id, r.rating]));
+}
+
 // POST /api/bookings
 // Create booking request (customer)
 router.post(
@@ -153,6 +209,8 @@ router.get(
     const limit = parseInt(req.query.limit || 20, 10);
     const offset = parseInt(req.query.offset || 0, 10);
 
+    await settleStaleBookings('customer_id', customerId);
+
     let query = supabase
       .from('booking_requests')
       .select(
@@ -194,6 +252,8 @@ router.get(
       throw new ApiError(`Failed to fetch bookings: ${error.message}`, 500);
     }
 
+    const ratingByBooking = await myRatings(customerId, bookings);
+
     logger.info('Customer bookings listed', {
       customerId,
       count: bookings.length,
@@ -203,6 +263,7 @@ router.get(
     res.json({
       bookings: bookings.map((b) => ({
         booking_id: b.id,
+        my_rating: ratingByBooking.get(b.id) ?? null,
         customer_id: b.customer_id,
         provider: {
           id: b.provider_id,
@@ -242,6 +303,8 @@ router.get(
     const { status } = req.query;
     const limit = parseInt(req.query.limit || 20, 10);
     const offset = parseInt(req.query.offset || 0, 10);
+
+    await settleStaleBookings('provider_id', providerId);
 
     let query = supabase
       .from('booking_requests')
@@ -292,6 +355,8 @@ router.get(
       throw new ApiError(`Failed to fetch bookings: ${error.message}`, 500);
     }
 
+    const ratingByBooking = await myRatings(providerId, bookings);
+
     logger.info('Provider bookings listed', {
       providerId,
       count: bookings.length,
@@ -301,6 +366,7 @@ router.get(
     res.json({
       bookings: bookings.map((b) => ({
         booking_id: b.id,
+        my_rating: ratingByBooking.get(b.id) ?? null,
         customer: {
           id: b.customer_id,
           first_name: b.profiles?.first_name ?? null,
@@ -557,14 +623,15 @@ router.post(
 );
 
 // POST /api/bookings/:booking_id/complete
-// Mark booking as completed (after service provided)
+// Mark booking as completed (after service provided). Either side can do it:
+// completing only unlocks reviews, so whoever gets to it first shouldn't be
+// held up by the other, and a customer's review can't be blocked by silence.
 router.post(
   '/:booking_id/complete',
   verifyAuth,
-  requireRole('provider'),
   validate(schemas.completeBooking),
   asyncHandler(async (req, res) => {
-    const providerId = req.user.id;
+    const userId = req.user.id;
     const { booking_id } = req.params;
     const { actual_duration_minutes, notes } = req.body;
 
@@ -579,8 +646,10 @@ router.post(
       throw new ApiError('Booking not found', 404);
     }
 
-    // Verify provider
-    if (booking.provider_id !== providerId) {
+    // Verify the caller is on this booking
+    const isCustomer = booking.customer_id === userId;
+    const isProvider = booking.provider_id === userId;
+    if (!isCustomer && !isProvider) {
       throw new ApiError('Unauthorized', 403);
     }
 
@@ -607,7 +676,8 @@ router.post(
 
     logger.info('Booking completed', {
       bookingId: booking_id,
-      providerId,
+      completedBy: isCustomer ? 'customer' : 'provider',
+      userId,
       actualDuration: actual_duration_minutes,
       price: booking.price,
       disputeDeadline,
@@ -616,11 +686,13 @@ router.post(
     // Log audit event
     await supabase.from('audit_logs').insert([
       {
-        user_id: providerId,
+        user_id: userId,
         event_type: 'booking_completed',
         event_details: {
           booking_id,
+          completed_by: isCustomer ? 'customer' : 'provider',
           customer_id: booking.customer_id,
+          provider_id: booking.provider_id,
           actual_duration_minutes,
           notes,
           price: booking.price,

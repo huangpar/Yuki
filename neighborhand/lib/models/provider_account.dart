@@ -9,6 +9,11 @@ class ProviderAccount {
   final List<String> categories;
   final bool isVerified;
   final DateTime? availableUntil;
+  final double? rating;
+  final int reviewCount;
+
+  /// A link to their reviews elsewhere (Google, Yelp, their own site).
+  final String? externalReviewsUrl;
 
   ProviderAccount({
     required this.id,
@@ -21,6 +26,9 @@ class ProviderAccount {
     required this.categories,
     required this.isVerified,
     this.availableUntil,
+    this.rating,
+    this.reviewCount = 0,
+    this.externalReviewsUrl,
   });
 
   String get fullName => '$firstName $lastName'.trim();
@@ -39,6 +47,9 @@ class ProviderAccount {
       categories: List<String>.from(json['categories'] as List? ?? const []),
       isVerified: json['is_verified_for_work'] as bool? ?? false,
       availableUntil: _parseDate(json['available_until']),
+      rating: (json['rating'] as num?)?.toDouble(),
+      reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      externalReviewsUrl: json['external_reviews_url'] as String?,
     );
   }
 }
@@ -58,6 +69,9 @@ class ProviderBooking {
   /// The arrival time the provider gave the customer when accepting.
   final DateTime? estimatedArrivalAt;
 
+  /// The rating this provider already left for the customer, if any.
+  final int? myRating;
+
   ProviderBooking({
     required this.id,
     required this.customerName,
@@ -70,6 +84,7 @@ class ProviderBooking {
     this.createdAt,
     this.expiresAt,
     this.estimatedArrivalAt,
+    this.myRating,
   });
 
   /// ASAP requests are scheduled for the moment they were sent.
@@ -99,6 +114,7 @@ class ProviderBooking {
       createdAt: _parseDate(json['created_at']),
       expiresAt: _parseDate(json['expires_at']),
       estimatedArrivalAt: _parseDate(json['estimated_arrival_at']),
+      myRating: (json['my_rating'] as num?)?.toInt(),
     );
   }
 

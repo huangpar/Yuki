@@ -195,8 +195,123 @@ export const schemas = {
     },
   },
 
+  createJob: {
+    service_category: {
+      type: 'string',
+      required: true,
+      minLength: 1,
+      maxLength: 50,
+      sanitize: ['trim', 'lowercase'],
+    },
+    description: {
+      type: 'string',
+      required: true,
+      minLength: 10,
+      maxLength: 1000,
+      sanitize: ['trim'],
+    },
+    address: {
+      type: 'string',
+      required: true,
+      minLength: 5,
+      maxLength: 255,
+      sanitize: ['trim'],
+    },
+    latitude: {
+      type: 'number',
+      required: true,
+      custom: (value) => (value < -90 || value > 90 ? 'Invalid latitude' : null),
+    },
+    longitude: {
+      type: 'number',
+      required: true,
+      custom: (value) => (value < -180 || value > 180 ? 'Invalid longitude' : null),
+    },
+    asap: {
+      type: 'boolean',
+    },
+    scheduled_for: {
+      type: 'date',
+      custom: (value) => (new Date(value) < new Date() ? 'Job must be in the future' : null),
+    },
+    estimated_duration_minutes: {
+      type: 'integer',
+      required: true,
+      min: 15,
+      max: 480,
+    },
+    // How long the post stays open for offers; accepting one closes it sooner.
+    open_for_hours: {
+      type: 'integer',
+      min: 1,
+      max: 168,
+    },
+    offered_price: {
+      type: 'number',
+      required: true,
+      custom: (value) => {
+        if (value <= 0) return 'Price must be positive';
+        if (value > 10000) return 'Price must be at most 10000';
+        if (!/^\d+(\.\d{1,2})?$/.test(value.toString())) {
+          return 'Price must have at most 2 decimal places';
+        }
+        return null;
+      },
+    },
+  },
+
+  createOffer: {
+    rate_type: {
+      type: 'string',
+      required: true,
+      enum: ['listed', 'flat', 'hourly'],
+      sanitize: ['lowercase', 'trim'],
+    },
+    // Required unless rate_type is 'listed', which uses the customer's price.
+    amount: {
+      type: 'number',
+      custom: (value) => {
+        if (value <= 0) return 'Rate must be positive';
+        if (value > 10000) return 'Rate must be at most 10000';
+        if (!/^\d+(\.\d{1,2})?$/.test(value.toString())) {
+          return 'Rate must have at most 2 decimal places';
+        }
+        return null;
+      },
+    },
+    message: {
+      type: 'string',
+      maxLength: 500,
+      sanitize: ['trim'],
+    },
+  },
+
+  createReview: {
+    booking_id: {
+      type: 'uuid',
+      required: true,
+    },
+    rating: {
+      type: 'integer',
+      required: true,
+      min: 1,
+      max: 5,
+    },
+    comment: {
+      type: 'string',
+      maxLength: 1000,
+      sanitize: ['trim'],
+    },
+  },
+
   // Provider schemas
   updateProviderProfile: {
+    // A provider's own Google or Yelp listing; we link out to it, never copy from it.
+    external_reviews_url: {
+      type: 'url',
+      maxLength: 500,
+      sanitize: ['trim'],
+    },
     bio: {
       type: 'string',
       minLength: 0,

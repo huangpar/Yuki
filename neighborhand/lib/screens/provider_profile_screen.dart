@@ -25,6 +25,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _rateController;
   late final TextEditingController _bioController;
+  late final TextEditingController _reviewsUrlController;
   late final Set<String> _categories;
   bool _saving = false;
   String? _error;
@@ -39,6 +40,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
           : (rate == rate.roundToDouble() ? rate.toStringAsFixed(0) : rate.toStringAsFixed(2)),
     );
     _bioController = TextEditingController(text: widget.account.bio ?? '');
+    _reviewsUrlController =
+        TextEditingController(text: widget.account.externalReviewsUrl ?? '');
     _categories = {...widget.account.categories};
   }
 
@@ -46,6 +49,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   void dispose() {
     _rateController.dispose();
     _bioController.dispose();
+    _reviewsUrlController.dispose();
     super.dispose();
   }
 
@@ -67,6 +71,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         hourlyRate: double.parse(_rateController.text.trim()),
         categories: _categories.toList(),
         bio: _bioController.text.trim(),
+        externalReviewsUrl: _reviewsUrlController.text.trim(),
       );
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -76,6 +81,16 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String? _validateReviewsUrl(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) return null;
+    final uri = Uri.tryParse(text);
+    if (uri == null || !uri.hasScheme || !(uri.isScheme('http') || uri.isScheme('https'))) {
+      return 'Paste the full link, starting with https://';
+    }
+    return null;
   }
 
   String? _validateRate(String? value) {
@@ -173,6 +188,19 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       alignLabelWithHint: true,
                       border: OutlineInputBorder(),
                     ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  TextFormField(
+                    controller: _reviewsUrlController,
+                    enabled: !_saving,
+                    keyboardType: TextInputType.url,
+                    decoration: const InputDecoration(
+                      labelText: 'Link your Google or Yelp profile (optional)',
+                      hintText: 'https://maps.google.com/...',
+                      helperText: 'Customers can open your reviews there from your profile.',
+                      helperMaxLines: 2,
+                    ),
+                    validator: _validateReviewsUrl,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   if (_error != null) ...[

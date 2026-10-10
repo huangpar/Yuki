@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../constants/service_categories.dart';
+import '../models/address_suggestion.dart';
 import '../models/nearby_provider_model.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/address_field.dart';
 import '../widgets/error_banner.dart';
 import 'booking_status_screen.dart';
 
@@ -30,6 +32,7 @@ class _BookingScreenState extends State<BookingScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   Duration? _duration;
+  AddressSuggestion? _selectedAddress;
   bool _submitting = false;
   String? _error;
 
@@ -129,16 +132,12 @@ class _BookingScreenState extends State<BookingScreen> {
 
               Text('Where?', style: AppTypography.h3),
               SizedBox(height: AppSpacing.md),
-              TextFormField(
+              AddressField(
                 controller: _addressController,
                 enabled: !_submitting,
-                decoration: InputDecoration(
-                  hintText: 'Street address, city',
-                  prefixIcon: Icon(Icons.place_outlined, color: AppColors.primary),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppBorderRadius.md),
-                  ),
-                ),
+                nearLatitude: widget.provider.latitude,
+                nearLongitude: widget.provider.longitude,
+                onSelected: (suggestion) => setState(() => _selectedAddress = suggestion),
                 validator: (value) {
                   final address = value?.trim() ?? '';
                   if (address.isEmpty) return 'Enter the address for the job';
@@ -402,13 +401,20 @@ class _BookingScreenState extends State<BookingScreen> {
     });
 
     try {
-      final position = await _currentPosition();
-      if (position == null) {
-        setState(() {
-          _error = 'Yuki needs your location to send the request. '
-              'Allow location access and try again.';
-        });
-        return;
+      // A picked address carries its own coordinates; otherwise use where they are.
+      var latitude = _selectedAddress?.latitude;
+      var longitude = _selectedAddress?.longitude;
+      if (latitude == null || longitude == null) {
+        final position = await _currentPosition();
+        if (position == null) {
+          setState(() {
+            _error = 'Pick an address from the suggestions, or allow location access '
+                'so we can send the request.';
+          });
+          return;
+        }
+        latitude = position.latitude;
+        longitude = position.longitude;
       }
 
       final booking = await SupabaseService.instance.createBooking(
@@ -416,8 +422,8 @@ class _BookingScreenState extends State<BookingScreen> {
         serviceCategory: _category!,
         description: _descriptionController.text.trim(),
         address: _addressController.text.trim(),
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: latitude,
+        longitude: longitude,
         durationMinutes: _duration!.inMinutes,
         scheduledFor: scheduledFor,
       );

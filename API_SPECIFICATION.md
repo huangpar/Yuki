@@ -429,7 +429,7 @@ Toggle "Available Now" status.
 ```
 
 **Rules:**
-- Availability lasts 30 minutes
+- Availability lasts 4 hours
 - Provider must refresh to stay available
 - Location required when going online
 - Status automatically expires if not refreshed

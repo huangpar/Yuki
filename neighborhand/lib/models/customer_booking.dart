@@ -13,6 +13,9 @@ class CustomerBooking {
   /// When the provider said they'd get there, set when they accept.
   final DateTime? estimatedArrivalAt;
 
+  /// The rating you already left for this booking, if you left one.
+  final int? myRating;
+
   CustomerBooking({
     required this.id,
     required this.status,
@@ -25,9 +28,17 @@ class CustomerBooking {
     this.createdAt,
     this.expiresAt,
     this.estimatedArrivalAt,
+    this.myRating,
   });
 
   bool get isPending => status == 'pending_acceptance';
+
+  bool get isAccepted => status == 'accepted';
+
+  bool get isComplete => status == 'completed';
+
+  /// A finished job you haven't rated yet.
+  bool get canReview => isComplete && myRating == null;
 
   bool get isExpired =>
       isPending && expiresAt != null && !expiresAt!.isAfter(DateTime.now());
@@ -67,6 +78,7 @@ class CustomerBooking {
       createdAt: _parseDate(json['created_at']),
       expiresAt: _parseDate(json['expires_at']),
       estimatedArrivalAt: _parseDate(json['estimated_arrival_at']),
+      myRating: (json['my_rating'] as num?)?.toInt(),
     );
   }
 }
