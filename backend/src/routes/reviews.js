@@ -5,6 +5,7 @@ import { validate } from '../middleware/validation.js';
 import { schemas } from '../validators/schemas.js';
 import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 import { logger } from '../middleware/logger.js';
+import { publicPhotoUrls, verifyOwnedPhotos } from '../utils/photos.js';
 
 const router = express.Router();
 
@@ -40,6 +41,7 @@ function shapeReview(review) {
     reviewer_role: review.reviewer_role,
     rating: review.rating,
     comment: review.comment,
+    photos: publicPhotoUrls(review.photos),
     created_at: review.created_at,
   };
 }
@@ -52,7 +54,8 @@ router.post(
   validate(schemas.createReview),
   asyncHandler(async (req, res) => {
     const userId = req.user.id;
-    const { booking_id, rating, comment } = req.body;
+    const { booking_id, rating, comment, photos } = req.body;
+    const ownPhotos = verifyOwnedPhotos(photos, 'review', userId) ?? [];
 
     const { data: booking, error } = await supabase
       .from('booking_requests')
@@ -90,6 +93,7 @@ router.post(
             reviewer_role: isCustomer ? 'customer' : 'provider',
             rating,
             comment: comment ?? null,
+            photos: ownPhotos,
             updated_at: now,
           },
         ],

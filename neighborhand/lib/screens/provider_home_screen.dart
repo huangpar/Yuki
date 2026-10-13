@@ -9,10 +9,14 @@ import '../models/provider_account.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/rating_stars.dart';
+import '../widgets/report_problem_dialog.dart';
 import '../widgets/review_dialog.dart';
 import '../utils/formatters.dart' show formatArrival;
 import 'home_screen.dart';
 import 'open_jobs_screen.dart';
+import 'admin_screen.dart';
+import 'feedback_screen.dart';
+import 'my_tickets_screen.dart';
 import 'provider_profile_screen.dart';
 import 'reviews_screen.dart';
 
@@ -42,6 +46,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
   bool _changingAvailability = false;
   bool _checkInAsked = false;
   bool _checkInOpen = false;
+  bool _isAdmin = false;
   final Set<String> _responding = {};
   final Set<String> _completing = {};
 
@@ -57,6 +62,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     _clock = Timer.periodic(const Duration(seconds: 1), (_) => _onTick());
     _bookingsTimer = Timer.periodic(_bookingsInterval, (_) => _loadBookings());
     _load();
+    _loadAdmin();
   }
 
   @override
@@ -336,6 +342,26 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     }
   }
 
+  Future<void> _loadAdmin() async {
+    try {
+      final profile = await _api.getMyProfile();
+      if (mounted && profile.isAdmin != _isAdmin) setState(() => _isAdmin = profile.isAdmin);
+    } catch (_) {
+      // Not an admin, or not reachable; either way the menu item stays hidden.
+    }
+  }
+
+  /// A provider reporting a problem with a job they took.
+  Future<void> _reportProblem(ProviderBooking booking) async {
+    final sent = await reportProblem(
+      context,
+      subjectType: 'booking',
+      bookingId: booking.id,
+      about: 'your job for ${booking.customerName}',
+    );
+    if (sent) _showMessage('Report sent. You can follow it under My reports.');
+  }
+
   Future<void> _markComplete(ProviderBooking booking) async {
     setState(() => _completing.add(booking.id));
     try {
@@ -426,6 +452,20 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                   _editProfile();
                 case 'customer':
                   _switchToCustomerView();
+                case 'feedback':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const FeedbackScreen(context: 'the provider view'),
+                    ),
+                  );
+                case 'reports':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const MyTicketsScreen()),
+                  );
+                case 'admin':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AdminScreen()),
+                  );
                 case 'sign_out':
                   _signOut();
               }
@@ -447,6 +487,15 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                 value: 'customer',
                 child: Text('Switch to customer view'),
               ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(value: 'feedback', child: Text('Send feedback')),
+              const PopupMenuItem<String>(value: 'reports', child: Text('My reports')),
+              if (_isAdmin)
+                const PopupMenuItem<String>(
+                  value: 'admin',
+                  child: Text('Admin', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              const PopupMenuDivider(),
               const PopupMenuItem<String>(value: 'sign_out', child: Text('Sign out')),
             ],
           ),
@@ -489,19 +538,27 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                             padding: const EdgeInsets.only(bottom: AppSpacing.md),
                             child: _BookingCard(
                               booking: booking,
-                              footer: SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: _completing.contains(booking.id)
-                                      ? null
-                                      : () => _markComplete(booking),
-                                  icon: _completing.contains(booking.id)
-                                      ? null
-                                      : const Icon(Icons.check_circle_outline, size: 18),
-                                  label: _completing.contains(booking.id)
-                                      ? const _ButtonSpinner()
-                                      : const Text('Mark complete'),
-                                ),
+                              footer: Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: _completing.contains(booking.id)
+                                          ? null
+                                          : () => _markComplete(booking),
+                                      icon: _completing.contains(booking.id)
+                                          ? null
+                                          : const Icon(Icons.check_circle_outline, size: 18),
+                                      label: _completing.contains(booking.id)
+                                          ? const _ButtonSpinner()
+                                          : const Text('Mark complete'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  TextButton(
+                                    onPressed: () => _reportProblem(booking),
+                                    child: const Text('Report a problem'),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

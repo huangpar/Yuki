@@ -5,6 +5,7 @@ import '../constants/service_categories.dart';
 import '../models/job_post.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/photo_strip.dart';
 import '../utils/formatters.dart';
 
 /// Jobs customers posted nearby, where a provider can take the asking price or
@@ -230,6 +231,10 @@ class _OpenJobCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(job.description, style: AppTypography.bodyMedium),
+          if (job.photos.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            PhotoStrip(urls: job.photos),
+          ],
           const SizedBox(height: AppSpacing.sm),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

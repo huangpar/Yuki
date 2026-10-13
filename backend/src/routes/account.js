@@ -12,7 +12,7 @@ async function loadAccount(userId) {
   const [profileResult, providerResult] = await Promise.all([
     supabase
       .from('profiles')
-      .select('first_name, last_name, email, phone')
+      .select('first_name, last_name, email, phone, is_admin')
       .eq('id', userId)
       .single(),
     supabase.from('provider_statuses').select('id').eq('id', userId).maybeSingle(),
@@ -26,6 +26,7 @@ async function loadAccount(userId) {
     id: userId,
     ...profileResult.data,
     is_provider: Boolean(providerResult.data),
+    is_admin: Boolean(profileResult.data.is_admin),
   };
 }
 

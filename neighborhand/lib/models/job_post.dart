@@ -11,6 +11,9 @@ class JobPost {
   final String status; // open, assigned, cancelled, expired
   final DateTime? createdAt;
   final DateTime? expiresAt;
+
+  /// Signed URLs, good for an hour from when the list was loaded.
+  final List<String> photos;
   final double? distanceMiles;
   final int offerCount;
   final JobOffer? myOffer;
@@ -28,6 +31,7 @@ class JobPost {
     required this.status,
     this.createdAt,
     this.expiresAt,
+    this.photos = const [],
     this.distanceMiles,
     this.offerCount = 0,
     this.myOffer,
@@ -67,6 +71,7 @@ class JobPost {
       status: json['status'] as String? ?? 'open',
       createdAt: _parseDate(json['created_at']),
       expiresAt: _parseDate(json['expires_at']),
+      photos: List<String>.from(json['photos'] as List? ?? const []),
       distanceMiles: (json['distance_miles'] as num?)?.toDouble(),
       offerCount: (json['offer_count'] as num?)?.toInt() ?? 0,
       myOffer: json['my_offer'] == null

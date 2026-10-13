@@ -5,6 +5,7 @@ import '../models/review.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../widgets/photo_strip.dart';
 import '../widgets/rating_stars.dart';
 
 /// Everyone's reviews of one person, plus a link to their listing elsewhere.
@@ -191,6 +192,10 @@ class _ReviewCard extends StatelessWidget {
           if (comment != null && comment.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(comment, style: AppTypography.bodyMedium),
+          ],
+          if (review.photos.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            PhotoStrip(urls: review.photos),
           ],
         ],
       ),

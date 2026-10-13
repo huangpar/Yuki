@@ -6,6 +6,7 @@ import '../models/address_suggestion.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/address_field.dart';
+import '../widgets/photo_picker.dart';
 import '../widgets/error_banner.dart';
 
 /// Lets a customer post a job with the price they're willing to pay, which
@@ -41,6 +42,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
   AddressSuggestion? _selectedAddress;
   Position? _nearby;
   bool _submitting = false;
+  List<String> _photos = const [];
   String? _error;
 
   bool get _hasTime => _asap || (_selectedDate != null && _selectedTime != null);
@@ -134,6 +136,7 @@ class _PostJobScreenState extends State<PostJobScreen> {
         offeredPrice: double.parse(_priceController.text.trim()),
         openForHours: _openForHours,
         scheduledFor: scheduledFor,
+        photos: _photos,
       );
 
       if (mounted) Navigator.of(context).pop(true);
@@ -248,6 +251,23 @@ class _PostJobScreenState extends State<PostJobScreen> {
                       }
                       return null;
                     },
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+
+                  Text('Photos (optional)', style: AppTypography.h3),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Show providers what the job involves. Only providers signed '
+                    'in to Yuki can see these.',
+                    style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  PhotoPicker(
+                    kind: 'job',
+                    paths: _photos,
+                    max: 4,
+                    enabled: !_submitting,
+                    onChanged: (paths) => setState(() => _photos = paths),
                   ),
                   const SizedBox(height: AppSpacing.lg),
 

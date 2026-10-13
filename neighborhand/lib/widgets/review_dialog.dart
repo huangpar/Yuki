@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import 'error_banner.dart';
+import 'photo_picker.dart';
 import 'rating_stars.dart';
 
 /// Asks for stars and an optional note, then saves the review.
@@ -30,6 +31,7 @@ class ReviewDialog extends StatefulWidget {
 class _ReviewDialogState extends State<ReviewDialog> {
   final _comment = TextEditingController();
   late int _rating = widget.existingRating ?? 0;
+  List<String> _photos = const [];
   bool _saving = false;
   String? _error;
 
@@ -55,6 +57,7 @@ class _ReviewDialogState extends State<ReviewDialog> {
         bookingId: widget.bookingId,
         rating: _rating,
         comment: _comment.text.trim(),
+        photos: _photos,
       );
       if (mounted) Navigator.of(context).pop(_rating);
     } on ApiException catch (e) {
@@ -97,6 +100,14 @@ class _ReviewDialogState extends State<ReviewDialog> {
                 alignLabelWithHint: true,
                 border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            PhotoPicker(
+              kind: 'review',
+              paths: _photos,
+              max: 3,
+              enabled: !_saving,
+              onChanged: (paths) => setState(() => _photos = paths),
             ),
             if (_error != null) ...[
               const SizedBox(height: AppSpacing.sm),

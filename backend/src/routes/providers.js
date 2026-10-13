@@ -6,6 +6,7 @@ import { validate } from '../middleware/validation.js';
 import { schemas } from '../validators/schemas.js';
 import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 import { logger } from '../middleware/logger.js';
+import { publicPhotoUrls, verifyOwnedPhotos } from '../utils/photos.js';
 import config from '../config.js';
 
 const router = express.Router();
@@ -102,7 +103,8 @@ router.put(
   validate(schemas.updateProviderProfile),
   asyncHandler(async (req, res) => {
     const providerId = req.user.id;
-    const { bio, hourly_rate, categories, external_reviews_url } = req.body;
+    const { bio, hourly_rate, categories, external_reviews_url, photos } = req.body;
+    const ownPhotos = verifyOwnedPhotos(photos, 'profile', req.user.id);
 
     // Update provider profile
     const { data, error } = await supabase
@@ -113,6 +115,7 @@ router.put(
         categories,
         // An empty field means "I don't have a listing" rather than a blank link.
         external_reviews_url: external_reviews_url ? external_reviews_url : null,
+        ...(ownPhotos === undefined ? {} : { photos: ownPhotos }),
       })
       .eq('id', providerId)
       .select();
@@ -174,7 +177,7 @@ router.get(
     const [profileResult, statusResult] = await Promise.all([
       supabase
         .from('profiles')
-        .select('first_name, last_name, email, phone, hourly_rate, bio, categories, rating_total, rating_count, external_reviews_url')
+        .select('first_name, last_name, email, phone, hourly_rate, bio, categories, rating_total, rating_count, external_reviews_url, photos')
         .eq('id', providerId)
         .single(),
       supabase
@@ -201,6 +204,8 @@ router.get(
           ? profileResult.data.rating_total / profileResult.data.rating_count
           : null,
       review_count: profileResult.data.rating_count ?? 0,
+      photos: publicPhotoUrls(profileResult.data.photos),
+      photo_paths: profileResult.data.photos ?? [],
       is_verified_for_work: status.is_verified_for_work,
       available_now: availableNow,
       available_until: availableNow ? status.available_until : null,

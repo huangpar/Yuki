@@ -85,4 +85,40 @@ export function requireRole(role) {
   };
 }
 
-export default { verifyAuth, verifyWebhook, requireRole };
+// Admin is granted in the database by hand, never by a route, so there is no
+// path through the API that makes someone an admin.
+export async function requireAdmin(req, res, next) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        error: 'unauthorized',
+        message: 'User not authenticated',
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      return res.status(500).json({
+        error: 'internal_server_error',
+        message: 'Admin check failed',
+      });
+    }
+
+    if (!data?.is_admin) {
+      // Deliberately the same answer someone gets for a route that isn't theirs.
+      return res.status(403).json({ error: 'forbidden', message: 'Not available' });
+    }
+
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: 'forbidden', message: 'Not available' });
+  }
+}
+
+export default { verifyAuth, verifyWebhook, requireRole, requireAdmin };

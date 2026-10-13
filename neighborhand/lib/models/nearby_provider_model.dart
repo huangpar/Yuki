@@ -17,6 +17,8 @@ class NearbyProvider {
   /// Where this provider's reviews live elsewhere (Google, Yelp, their site).
   final String? externalReviewsUrl;
 
+  final List<String> photos;
+
   NearbyProvider({
     required this.id,
     required this.firstName,
@@ -33,6 +35,7 @@ class NearbyProvider {
     this.rating,
     this.reviewCount,
     this.externalReviewsUrl,
+    this.photos = const [],
   });
 
   String get fullName => '$firstName $lastName';
@@ -54,6 +57,7 @@ class NearbyProvider {
       rating: json['rating'] != null ? (json['rating'] as num).toDouble() : null,
       reviewCount: (json['review_count'] as num?)?.toInt(),
       externalReviewsUrl: json['external_reviews_url'] as String?,
+      photos: List<String>.from(json['photos'] as List? ?? const []),
     );
   }
 
@@ -74,6 +78,7 @@ class NearbyProvider {
       'rating': rating,
       'review_count': reviewCount,
       'external_reviews_url': externalReviewsUrl,
+      'photos': photos,
     };
   }
 }

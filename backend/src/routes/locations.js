@@ -5,6 +5,7 @@ import { validate, validateQuery, validateBody } from '../middleware/validation.
 import { schemas } from '../validators/schemas.js';
 import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 import { logger } from '../middleware/logger.js';
+import { publicPhotoUrls } from '../utils/photos.js';
 
 const router = express.Router();
 
@@ -236,7 +237,8 @@ router.get(
         categories,
         rating_total,
         rating_count,
-        external_reviews_url
+        external_reviews_url,
+        photos
       )
     `
     );
@@ -293,6 +295,7 @@ router.get(
           rating: profile.rating_count ? profile.rating_total / profile.rating_count : null,
           review_count: profile.rating_count ?? 0,
           external_reviews_url: profile.external_reviews_url ?? null,
+          photos: publicPhotoUrls(profile.photos),
         };
       })
       .filter((p) => p !== null)

@@ -11,7 +11,10 @@ import '../theme/app_theme.dart';
 import '../widgets/error_banner.dart';
 import 'booking_screen.dart';
 import 'complete_profile_screen.dart';
+import 'admin_screen.dart';
 import 'customer_bookings_screen.dart';
+import 'feedback_screen.dart';
+import 'my_tickets_screen.dart';
 import 'my_jobs_screen.dart';
 import 'home_screen.dart';
 import 'provider_home_screen.dart';
@@ -90,6 +93,7 @@ Future<void> finishSignIn(
 
 /// Customer app bar actions: sign-in buttons when signed out, view switch and account menu when signed in.
 class AccountActions extends StatefulWidget {
+  // Shows feedback for everyone, and the admin area only to admins.
   const AccountActions({super.key});
 
   @override
@@ -98,6 +102,7 @@ class AccountActions extends StatefulWidget {
 
 class _AccountActionsState extends State<AccountActions> {
   StreamSubscription<Object?>? _authEvents;
+  bool _isAdmin = false;
 
   @override
   void initState() {
@@ -106,7 +111,9 @@ class _AccountActionsState extends State<AccountActions> {
       if (!mounted) return;
       _authEvents = SupabaseService.instance.authEvents.listen((_) {
         if (mounted) setState(() {});
+        _loadAdmin();
       });
+      _loadAdmin();
     });
   }
 
@@ -114,6 +121,23 @@ class _AccountActionsState extends State<AccountActions> {
   void dispose() {
     _authEvents?.cancel();
     super.dispose();
+  }
+
+  /// Admin is granted in the database, so the app has to ask whether this
+  /// account has it. A failure just means the menu item stays hidden.
+  Future<void> _loadAdmin() async {
+    if (SupabaseService.instance.getCurrentUser() == null) {
+      if (mounted && _isAdmin) setState(() => _isAdmin = false);
+      return;
+    }
+    try {
+      final profile = await SupabaseService.instance.getMyProfile();
+      if (mounted && profile.isAdmin != _isAdmin) {
+        setState(() => _isAdmin = profile.isAdmin);
+      }
+    } catch (_) {
+      // Not an admin, or not reachable; either way there's nothing to show.
+    }
   }
 
   void _open(Widget screen) {
@@ -174,6 +198,9 @@ class _AccountActionsState extends State<AccountActions> {
             if (value == 'bookings') _open(const CustomerBookingsScreen());
             if (value == 'jobs') _open(const MyJobsScreen());
             if (value == 'provider') openProviderView(context);
+            if (value == 'feedback') _open(const FeedbackScreen(context: 'the map'));
+            if (value == 'reports') _open(const MyTicketsScreen());
+            if (value == 'admin') _open(const AdminScreen());
             if (value == 'sign_out') _signOut();
           },
           itemBuilder: (_) => [
@@ -188,6 +215,15 @@ class _AccountActionsState extends State<AccountActions> {
               value: 'provider',
               child: Text('Switch to provider view'),
             ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(value: 'feedback', child: Text('Send feedback')),
+            const PopupMenuItem<String>(value: 'reports', child: Text('My reports')),
+            if (_isAdmin)
+              const PopupMenuItem<String>(
+                value: 'admin',
+                child: Text('Admin', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            const PopupMenuDivider(),
             const PopupMenuItem<String>(value: 'sign_out', child: Text('Sign out')),
           ],
           child: Row(

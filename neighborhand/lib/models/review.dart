@@ -7,6 +7,7 @@ class Review {
   final int rating;
   final String? comment;
   final DateTime? createdAt;
+  final List<String> photos;
 
   Review({
     required this.id,
@@ -16,6 +17,7 @@ class Review {
     required this.rating,
     this.comment,
     this.createdAt,
+    this.photos = const [],
   });
 
   bool get fromCustomer => reviewerRole == 'customer';
@@ -30,6 +32,7 @@ class Review {
       rating: (json['rating'] as num).toInt(),
       comment: json['comment'] as String?,
       createdAt: createdAt == null ? null : DateTime.parse(createdAt).toLocal(),
+      photos: List<String>.from(json['photos'] as List? ?? const []),
     );
   }
 }
