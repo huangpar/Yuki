@@ -8,6 +8,8 @@ import '../models/customer_booking.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../widgets/rating_stars.dart';
+import '../widgets/review_dialog.dart';
 import 'booking_status_screen.dart';
 
 class CustomerBookingsScreen extends StatefulWidget {
@@ -24,6 +26,7 @@ class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
   String? _error;
   Timer? _clock;
   Timer? _poll;
+  final Set<String> _completing = {};
 
   bool get _anyWaiting => _bookings?.any((b) => b.isWaiting) ?? false;
 
@@ -62,6 +65,44 @@ class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
         setState(() => _error = 'Could not load your bookings. Check your connection and try again.');
       }
     }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Either side can close out a job; whoever gets there first opens up reviews.
+  Future<void> _markDone(CustomerBooking booking) async {
+    setState(() => _completing.add(booking.id));
+    try {
+      await SupabaseService.instance.completeBooking(booking.id);
+      if (!mounted) return;
+      await _load();
+      if (!mounted) return;
+      final rating = await askForReview(
+        context,
+        bookingId: booking.id,
+        subjectName: booking.providerName ?? 'your provider',
+      );
+      if (rating != null) _load();
+    } on ApiException catch (e) {
+      _showMessage(e.message);
+    } catch (_) {
+      _showMessage('Could not update that booking. Check your connection and try again.');
+    } finally {
+      if (mounted) setState(() => _completing.remove(booking.id));
+    }
+  }
+
+  Future<void> _review(CustomerBooking booking) async {
+    final rating = await askForReview(
+      context,
+      bookingId: booking.id,
+      subjectName: booking.providerName ?? 'your provider',
+      existingRating: booking.myRating,
+    );
+    if (rating != null) _load();
   }
 
   Future<void> _open(CustomerBooking booking) async {
@@ -126,6 +167,9 @@ class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
         itemBuilder: (_, i) => _BookingTile(
           booking: bookings[i],
           onTap: () => _open(bookings[i]),
+          onReview: () => _review(bookings[i]),
+          onMarkDone: () => _markDone(bookings[i]),
+          markingDone: _completing.contains(bookings[i].id),
         ),
       ),
     );
@@ -135,19 +179,29 @@ class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
 class _BookingTile extends StatelessWidget {
   final CustomerBooking booking;
   final VoidCallback onTap;
+  final VoidCallback onReview;
+  final VoidCallback onMarkDone;
+  final bool markingDone;
 
-  const _BookingTile({required this.booking, required this.onTap});
+  const _BookingTile({
+    required this.booking,
+    required this.onTap,
+    required this.onReview,
+    required this.onMarkDone,
+    required this.markingDone,
+  });
 
   @override
   Widget build(BuildContext context) {
     final when = booking.scheduledFor;
     final price = booking.price;
-    final arrival = booking.status == 'accepted' ? booking.estimatedArrivalAt : null;
+    final arrival = booking.isAccepted ? booking.estimatedArrivalAt : null;
+    final created = booking.createdAt;
     final details = [
       categoryLabel(booking.serviceCategory),
       if (when != null) booking.isAsap ? 'ASAP' : formatWhen(context, when),
       if (booking.durationMinutes != null) formatDuration(booking.durationMinutes!),
-    ].join(' · ');
+    ].join(' \u00b7 ');
 
     return Material(
       color: AppColors.surface,
@@ -160,43 +214,107 @@ class _BookingTile extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(booking.providerName ?? 'Provider', style: AppTypography.h3),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      details,
-                      style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(booking.providerName ?? 'Provider', style: AppTypography.h3),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          details,
+                          style: AppTypography.bodyMedium
+                              .copyWith(color: AppColors.textSecondary),
+                        ),
+                        if (created != null) ...[
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Requested ${formatWhen(context, created)}',
+                            style: AppTypography.bodySmall
+                                .copyWith(color: AppColors.textSecondary),
+                          ),
+                        ],
+                        if (arrival != null) ...[
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Arriving around ${formatArrival(context, arrival)}',
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (price != null) ...[
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            '\$${price.toStringAsFixed(2)}',
+                            style: AppTypography.bodyMedium.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    if (arrival != null) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Arriving around ${formatArrival(context, arrival)}',
-                        style: AppTypography.bodyMedium.copyWith(
-                          color: AppColors.success,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  _StatusChip(booking: booking),
+                ],
+              ),
+              if (booking.isAccepted) ...[
+                const Divider(height: AppSpacing.lg, color: AppColors.border),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Finished? Marking it done lets you both leave a review.',
+                        style: AppTypography.bodySmall
+                            .copyWith(color: AppColors.textSecondary),
                       ),
-                    ],
-                    if (price != null) ...[
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        '\$${price.toStringAsFixed(2)}',
-                        style: AppTypography.bodyMedium.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    OutlinedButton.icon(
+                      onPressed: markingDone ? null : onMarkDone,
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: Text(markingDone ? 'Saving\u2026' : 'Mark this done'),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              _StatusChip(booking: booking),
+              ],
+              if (booking.isComplete) ...[
+                const Divider(height: AppSpacing.lg, color: AppColors.border),
+                booking.canReview
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: onReview,
+                          icon: const Icon(Icons.star_border, size: 18),
+                          label: Text('Rate ${booking.providerName ?? 'your provider'}'),
+                        ),
+                      )
+                    : Row(
+                        children: [
+                          Text(
+                            'You rated',
+                            style: AppTypography.bodySmall
+                                .copyWith(color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          RatingStars(
+                            rating: booking.myRating!.toDouble(),
+                            reviewCount: 1,
+                            size: 14,
+                            showCount: false,
+                          ),
+                          const Spacer(),
+                          TextButton(onPressed: onReview, child: const Text('Edit')),
+                        ],
+                      ),
+              ],
             ],
           ),
         ),

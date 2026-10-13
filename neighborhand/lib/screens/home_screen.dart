@@ -4,6 +4,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../constants/service_categories.dart';
 import '../theme/app_theme.dart';
+import '../widgets/rating_stars.dart';
+import 'reviews_screen.dart';
 import '../models/nearby_provider_model.dart';
 import '../services/supabase_service.dart';
 import 'auth_screen.dart';
@@ -487,6 +489,12 @@ class ProviderCard extends StatelessWidget {
                   '${provider.distanceMiles.toStringAsFixed(1)} mi away',
                   style: AppTypography.caption,
                 ),
+                SizedBox(height: AppSpacing.xs),
+                RatingStars(
+                  rating: provider.rating,
+                  reviewCount: provider.reviewCount ?? 0,
+                  size: 13,
+                ),
                 SizedBox(height: AppSpacing.sm),
                 Text(
                   provider.categories.map(categoryLabel).join(', '),
@@ -560,6 +568,34 @@ class ProviderDetailsSheet extends StatelessWidget {
                     Text(
                       '${provider.distanceMiles.toStringAsFixed(1)} mi away',
                       style: AppTypography.caption,
+                    ),
+                    SizedBox(height: AppSpacing.xs),
+                    InkWell(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ReviewsScreen(
+                            profileId: provider.id,
+                            name: provider.firstName,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          RatingStars(
+                            rating: provider.rating,
+                            reviewCount: provider.reviewCount ?? 0,
+                            size: 16,
+                          ),
+                          SizedBox(width: AppSpacing.xs),
+                          Text(
+                            'See reviews',
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

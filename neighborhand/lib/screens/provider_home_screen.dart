@@ -8,9 +8,13 @@ import '../constants/service_categories.dart';
 import '../models/provider_account.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/rating_stars.dart';
+import '../widgets/review_dialog.dart';
 import '../utils/formatters.dart' show formatArrival;
 import 'home_screen.dart';
+import 'open_jobs_screen.dart';
 import 'provider_profile_screen.dart';
+import 'reviews_screen.dart';
 
 class ProviderHomeScreen extends StatefulWidget {
   const ProviderHomeScreen({super.key});
@@ -22,6 +26,9 @@ class ProviderHomeScreen extends StatefulWidget {
 class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
   static const _locationInterval = Duration(seconds: 60);
   static const _bookingsInterval = Duration(seconds: 15);
+  // Matches the backend's availability window; the check-in lands halfway through it.
+  static const _availabilityWindow = Duration(hours: 4);
+  static const _checkInGrace = Duration(minutes: 5);
 
   final _api = SupabaseService.instance;
 
@@ -33,7 +40,10 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
   bool _needsProviderProfile = false;
   bool _enablingProvider = false;
   bool _changingAvailability = false;
+  bool _checkInAsked = false;
+  bool _checkInOpen = false;
   final Set<String> _responding = {};
+  final Set<String> _completing = {};
 
   Timer? _clock;
   Timer? _bookingsTimer;
@@ -139,15 +149,74 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     final until = _availableUntil;
     if (until != null && !until.isAfter(DateTime.now())) {
       _setAvailableUntil(null);
-      _showMessage('Your 30 minutes are up. Go available again to keep getting requests.');
-    } else if (until != null || _requests.isNotEmpty) {
-      setState(() {});
+      _showMessage('Your 4 hours are up. Go available again to keep getting requests.');
+      return;
     }
+    if (until != null &&
+        !_checkInAsked &&
+        !_checkInOpen &&
+        DateTime.now().isAfter(until.subtract(_availabilityWindow ~/ 2))) {
+      _askStillAvailable();
+    }
+    if (until != null || _requests.isNotEmpty) setState(() {});
   }
 
   void _setAvailableUntil(DateTime? until) {
     setState(() => _availableUntil = until);
+    _checkInAsked = false;
     _syncLocationUpdates();
+  }
+
+  /// Halfway through the window, check someone is still there. No answer within
+  /// the grace period takes them off the map, which is what the window is for.
+  Future<void> _askStillAvailable() async {
+    _checkInAsked = true;
+    _checkInOpen = true;
+    Timer? timeout;
+
+    final answer = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        timeout ??= Timer(_checkInGrace, () {
+          if (Navigator.of(dialogContext).canPop()) Navigator.of(dialogContext).pop();
+        });
+        return AlertDialog(
+          title: Text('Still available?', style: AppTypography.h3),
+          content: Text(
+            'You\'ve been available for ${(_availabilityWindow ~/ 2).inHours} hours. '
+            'Stay on the map for another ${_availabilityWindow.inHours} hours, or we\'ll '
+            'take you off in ${_checkInGrace.inMinutes} minutes.',
+            style: AppTypography.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Go offline'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('I\'m still here'),
+            ),
+          ],
+        );
+      },
+    );
+
+    timeout?.cancel();
+    _checkInOpen = false;
+    if (!mounted) return;
+
+    if (answer == true) {
+      await _changeAvailability(available: true);
+      return;
+    }
+    await _changeAvailability(available: false);
+    if (answer == null) {
+      _showMessage(
+        'No answer, so we took you off the map. Go available again when you\'re ready.',
+      );
+    }
   }
 
   void _syncLocationUpdates() {
@@ -267,6 +336,32 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
     }
   }
 
+  Future<void> _markComplete(ProviderBooking booking) async {
+    setState(() => _completing.add(booking.id));
+    try {
+      await _api.completeBooking(booking.id);
+      if (!mounted) return;
+      setState(() => _upcoming.removeWhere((b) => b.id == booking.id));
+      final rating = await askForReview(
+        context,
+        bookingId: booking.id,
+        subjectName: booking.customerName,
+        existingRating: booking.myRating,
+      );
+      if (!mounted) return;
+      _showMessage(rating == null
+          ? 'Marked complete. ${booking.customerName} can review you now.'
+          : 'Thanks \u2014 your review of ${booking.customerName} is posted.');
+      _loadBookings();
+    } on ApiException catch (e) {
+      _showMessage(e.message);
+    } catch (_) {
+      _showMessage('Something went wrong. Try again.');
+    } finally {
+      if (mounted) setState(() => _completing.remove(booking.id));
+    }
+  }
+
   Future<void> _editProfile() async {
     final account = _account;
     if (account == null) return;
@@ -292,7 +387,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
       try {
         await _api.setProviderAvailability(available: false);
       } catch (_) {
-        // Signing out anyway; the 30-minute window still takes them off the map.
+        // Signing out anyway; the availability window still takes them off the map.
       }
     }
     await _api.signOut();
@@ -372,6 +467,17 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                       _ProfileHeader(account: account),
                       const SizedBox(height: AppSpacing.lg),
                       _buildStatusCard(account),
+                      const SizedBox(height: AppSpacing.md),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const OpenJobsScreen()),
+                          ),
+                          icon: const Icon(Icons.work_outline),
+                          label: const Text('Browse jobs customers posted'),
+                        ),
+                      ),
                       const SizedBox(height: AppSpacing.xl),
                       ..._buildRequests(account),
                       if (_upcoming.isNotEmpty) ...[
@@ -381,7 +487,23 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                         for (final booking in _upcoming)
                           Padding(
                             padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                            child: _BookingCard(booking: booking),
+                            child: _BookingCard(
+                              booking: booking,
+                              footer: SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _completing.contains(booking.id)
+                                      ? null
+                                      : () => _markComplete(booking),
+                                  icon: _completing.contains(booking.id)
+                                      ? null
+                                      : const Icon(Icons.check_circle_outline, size: 18),
+                                  label: _completing.contains(booking.id)
+                                      ? const _ButtonSpinner()
+                                      : const Text('Mark complete'),
+                                ),
+                              ),
+                            ),
                           ),
                       ],
                     ],
@@ -472,7 +594,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
       return _StatusCard(
         dotColor: AppColors.textHint,
         title: 'Offline',
-        body: 'Customers within 5 miles will see you on the map for 30 minutes.',
+        body: 'Customers within 5 miles will see you on the map for 4 hours.',
         actions: [
           SizedBox(
             width: double.infinity,
@@ -515,7 +637,7 @@ class _ProviderHomeScreenState extends State<ProviderHomeScreen> {
                     _changingAvailability ? null : () => _changeAvailability(available: true),
                 child: _changingAvailability
                     ? const _ButtonSpinner()
-                    : const Text('Extend to 30 min'),
+                    : const Text('Extend to 4 hours'),
               ),
             ),
           ],
@@ -636,6 +758,30 @@ class _ProfileHeader extends StatelessWidget {
                   style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
                 ),
               ],
+              const SizedBox(height: AppSpacing.xs),
+              InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ReviewsScreen(
+                      profileId: account.id,
+                      name: account.firstName.isEmpty ? 'you' : account.firstName,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    RatingStars(rating: account.rating, reviewCount: account.reviewCount),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      'Your reviews',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -939,7 +1085,11 @@ const _months = [
 
 String _formatCountdown(Duration remaining) {
   final seconds = remaining.inSeconds < 0 ? 0 : remaining.inSeconds;
-  return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final secondsPart = (seconds % 60).toString().padLeft(2, '0');
+  if (hours == 0) return '$minutes:$secondsPart';
+  return '$hours:${minutes.toString().padLeft(2, '0')}:$secondsPart';
 }
 
 String _formatWhen(BuildContext context, DateTime when) {

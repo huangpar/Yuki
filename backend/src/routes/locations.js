@@ -8,6 +8,21 @@ import { logger } from '../middleware/logger.js';
 
 const router = express.Router();
 
+// Straight-line distance in miles. The API takes and reports miles throughout,
+// so this stays in miles rather than converting at each call site.
+function milesBetween(lat1, lon1, lat2, lon2) {
+  const earthRadiusMiles = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return earthRadiusMiles * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // Rate limiting: store last update time per provider
 const lastLocationUpdate = new Map();
 const LOCATION_UPDATE_COOLDOWN_MS = 30 * 1000; // 30 seconds
@@ -50,7 +65,7 @@ router.post(
     // Update availability
     const newStatus = available ? 'online' : 'offline';
     const expiresAt = available
-      ? new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes
+      ? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString() // 4 hours
       : null;
 
     const updateData = {
@@ -204,9 +219,6 @@ router.get(
       throw new ApiError('Invalid radius', 400, 'invalid_radius');
     }
 
-    // Convert radius to meters
-    const radiusMeters = radius * 1609.34; // miles to meters
-
     // Build the query
     let query = supabase.from('provider_statuses').select(
       `
@@ -221,7 +233,10 @@ router.get(
         phone,
         hourly_rate,
         bio,
-        categories
+        categories,
+        rating_total,
+        rating_count,
+        external_reviews_url
       )
     `
     );
@@ -243,46 +258,17 @@ router.get(
     const nearbyProviders = allProviders
       .filter((provider) => {
         if (!provider.latitude || !provider.longitude) return false;
-
-        // Haversine distance calculation
-        const lat1 = parseFloat(latitude);
-        const lon1 = parseFloat(longitude);
-        const lat2 = provider.latitude;
-        const lon2 = provider.longitude;
-
-        const R = 6371; // Earth's radius in km
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLon = ((lon2 - lon1) * Math.PI) / 180;
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((lat1 * Math.PI) / 180) *
-            Math.cos((lat2 * Math.PI) / 180) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const distance = R * c; // in km
-
-        return distance <= radius;
+        return (
+          milesBetween(latitude, longitude, provider.latitude, provider.longitude) <= radius
+        );
       })
       .map((provider) => {
-        // Calculate distance for display
-        const lat1 = parseFloat(latitude);
-        const lon1 = parseFloat(longitude);
-        const lat2 = provider.latitude;
-        const lon2 = provider.longitude;
-
-        const R = 6371;
-        const dLat = ((lat2 - lat1) * Math.PI) / 180;
-        const dLon = ((lon2 - lon1) * Math.PI) / 180;
-        const a =
-          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-          Math.cos((lat1 * Math.PI) / 180) *
-            Math.cos((lat2 * Math.PI) / 180) *
-            Math.sin(dLon / 2) *
-            Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        const distanceKm = R * c;
-        const distanceMiles = distanceKm * 0.621371;
+        const distanceMiles = milesBetween(
+          latitude,
+          longitude,
+          provider.latitude,
+          provider.longitude
+        );
 
         const profile = provider.profiles;
 
@@ -304,6 +290,9 @@ router.get(
           longitude: provider.longitude,
           distance_miles: Math.round(distanceMiles * 10) / 10, // 1 decimal
           available_now: true,
+          rating: profile.rating_count ? profile.rating_total / profile.rating_count : null,
+          review_count: profile.rating_count ?? 0,
+          external_reviews_url: profile.external_reviews_url ?? null,
         };
       })
       .filter((p) => p !== null)

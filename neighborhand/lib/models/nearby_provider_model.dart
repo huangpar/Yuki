@@ -14,6 +14,9 @@ class NearbyProvider {
   final double? rating;
   final int? reviewCount;
 
+  /// Where this provider's reviews live elsewhere (Google, Yelp, their site).
+  final String? externalReviewsUrl;
+
   NearbyProvider({
     required this.id,
     required this.firstName,
@@ -29,6 +32,7 @@ class NearbyProvider {
     required this.availableNow,
     this.rating,
     this.reviewCount,
+    this.externalReviewsUrl,
   });
 
   String get fullName => '$firstName $lastName';
@@ -48,7 +52,8 @@ class NearbyProvider {
       distanceMiles: (json['distance_miles'] as num).toDouble(),
       availableNow: json['available_now'] as bool? ?? true,
       rating: json['rating'] != null ? (json['rating'] as num).toDouble() : null,
-      reviewCount: json['review_count'] as int?,
+      reviewCount: (json['review_count'] as num?)?.toInt(),
+      externalReviewsUrl: json['external_reviews_url'] as String?,
     );
   }
 
@@ -68,6 +73,7 @@ class NearbyProvider {
       'available_now': availableNow,
       'rating': rating,
       'review_count': reviewCount,
+      'external_reviews_url': externalReviewsUrl,
     };
   }
 }

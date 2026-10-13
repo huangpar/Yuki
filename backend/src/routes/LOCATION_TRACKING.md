@@ -73,11 +73,11 @@ Authorization: Bearer {access_token}
    - availability_status: 'online'
    - latitude, longitude: set to provided values
    - last_location_update: now
-3. Sets expiration: 30 minutes from now
+3. Sets expiration: 4 hours from now
 4. **Auto-broadcast via real-time subscription** — All subscribed customers see provider appear on map
 5. Returns expires_at (provider must refresh before this time)
 
-**Important:** Availability expires after 30 minutes if not refreshed. Provider will disappear from all customer maps.
+**Important:** Availability expires after 4 hours if not refreshed. Provider will disappear from all customer maps.
 
 ---
 
@@ -135,7 +135,7 @@ Content-Type: application/json
    - latitude, longitude: new position
    - last_location_update: now
 4. **Auto-broadcast via real-time** — All customers subscribed to provider see location update
-5. Keeps the 30-minute expiration timer (not reset)
+5. Keeps the 4-hour expiration timer (not reset)
 
 **Best Practice:** Provider app should call this every 60 seconds while "Available Now"
 

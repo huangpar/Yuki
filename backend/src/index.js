@@ -10,6 +10,9 @@ import providersRouter from './routes/providers.js';
 import locationsRouter from './routes/locations.js';
 import bookingsRouter from './routes/bookings.js';
 import accountRouter from './routes/account.js';
+import jobsRouter from './routes/jobs.js';
+import placesRouter from './routes/places.js';
+import reviewsRouter from './routes/reviews.js';
 
 const app = express();
 
@@ -90,6 +93,9 @@ app.use('/api', locationsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/providers', providersRouter);
 app.use('/api/me', accountRouter);
+app.use('/api/jobs', jobsRouter);
+app.use('/api/places', placesRouter);
+app.use('/api/reviews', reviewsRouter);
 
 // 404 handler
 app.use((req, res) => {

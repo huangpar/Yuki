@@ -12,6 +12,7 @@ import '../widgets/error_banner.dart';
 import 'booking_screen.dart';
 import 'complete_profile_screen.dart';
 import 'customer_bookings_screen.dart';
+import 'my_jobs_screen.dart';
 import 'home_screen.dart';
 import 'provider_home_screen.dart';
 
@@ -171,6 +172,7 @@ class _AccountActionsState extends State<AccountActions> {
           tooltip: 'Account',
           onSelected: (value) {
             if (value == 'bookings') _open(const CustomerBookingsScreen());
+            if (value == 'jobs') _open(const MyJobsScreen());
             if (value == 'provider') openProviderView(context);
             if (value == 'sign_out') _signOut();
           },
@@ -181,6 +183,7 @@ class _AccountActionsState extends State<AccountActions> {
             ),
             const PopupMenuDivider(),
             const PopupMenuItem<String>(value: 'bookings', child: Text('My bookings')),
+            const PopupMenuItem<String>(value: 'jobs', child: Text('My posted jobs')),
             const PopupMenuItem<String>(
               value: 'provider',
               child: Text('Switch to provider view'),

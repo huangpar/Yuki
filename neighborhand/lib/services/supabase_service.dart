@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/address_suggestion.dart';
 import '../models/customer_booking.dart';
+import '../models/review.dart';
+import '../models/job_post.dart';
 import '../models/my_profile.dart';
 import '../models/nearby_provider_model.dart';
 import '../models/provider_account.dart';
@@ -315,11 +318,13 @@ class SupabaseService {
     required double hourlyRate,
     required List<String> categories,
     required String bio,
+    String? externalReviewsUrl,
   }) async {
     await _request('PUT', '/providers/profile', {
       'hourly_rate': hourlyRate,
       'categories': categories,
       'bio': bio,
+      'external_reviews_url': externalReviewsUrl ?? '',
     });
   }
 
@@ -364,6 +369,123 @@ class SupabaseService {
 
   Future<void> declineBooking(String bookingId) async {
     await _request('POST', '/bookings/$bookingId/decline', {});
+  }
+
+  /// Providers mark a job finished; this is what unlocks reviews for both sides.
+  Future<void> completeBooking(String bookingId) async {
+    await _request('POST', '/bookings/$bookingId/complete', {});
+  }
+
+  // Reviews API
+  /// Rate the other side of a finished booking. Sending again replaces your review.
+  Future<void> submitReview({
+    required String bookingId,
+    required int rating,
+    String? comment,
+  }) async {
+    await _request('POST', '/reviews', {
+      'booking_id': bookingId,
+      'rating': rating,
+      if (comment != null && comment.isNotEmpty) 'comment': comment,
+    });
+  }
+
+  Future<ReviewSummary> getReviewsFor(String profileId) async {
+    final data = await _request('GET', '/reviews/for/$profileId') as Map<String, dynamic>;
+    return ReviewSummary.fromJson(data);
+  }
+
+  /// Address suggestions while someone types, biased toward [latitude]/[longitude].
+  Future<List<AddressSuggestion>> suggestAddresses(
+    String query, {
+    double? latitude,
+    double? longitude,
+  }) async {
+    final params = {
+      'q': query,
+      if (latitude != null) 'latitude': latitude.toString(),
+      if (longitude != null) 'longitude': longitude.toString(),
+    };
+    final path = '/places/suggest?${Uri(queryParameters: params).query}';
+    final data = await _request('GET', path) as Map<String, dynamic>;
+    return (data['suggestions'] as List)
+        .map((s) => AddressSuggestion.fromJson(s as Map<String, dynamic>))
+        .toList();
+  }
+
+  // Jobs API
+  /// Posts a job others can offer on. Pass no [scheduledFor] for ASAP.
+  Future<JobPost> postJob({
+    required String serviceCategory,
+    required String description,
+    required String address,
+    required double latitude,
+    required double longitude,
+    required int durationMinutes,
+    required double offeredPrice,
+    required int openForHours,
+    DateTime? scheduledFor,
+  }) async {
+    final data = await _request('POST', '/jobs', {
+      'service_category': serviceCategory,
+      'description': description,
+      'address': address,
+      'latitude': latitude,
+      'longitude': longitude,
+      'estimated_duration_minutes': durationMinutes,
+      'offered_price': offeredPrice,
+      'open_for_hours': openForHours,
+      if (scheduledFor == null) 'asap': true else 'scheduled_for': _isoSeconds(scheduledFor),
+    }) as Map<String, dynamic>;
+    return JobPost.fromJson(data);
+  }
+
+  Future<List<JobPost>> getMyJobs() async {
+    final data = await _request('GET', '/jobs/mine') as Map<String, dynamic>;
+    return (data['jobs'] as List)
+        .map((j) => JobPost.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> cancelJob(String jobId) async {
+    await _request('POST', '/jobs/$jobId/cancel', {});
+  }
+
+  Future<List<JobPost>> getOpenJobs({
+    required double latitude,
+    required double longitude,
+    int radius = 5,
+  }) async {
+    final data = await _request(
+      'GET',
+      '/jobs/open?latitude=$latitude&longitude=$longitude&radius=$radius',
+    ) as Map<String, dynamic>;
+    return (data['jobs'] as List)
+        .map((j) => JobPost.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// [rateType] is 'listed' (take the customer's price), 'flat' or 'hourly'.
+  Future<JobOffer> sendJobOffer(
+    String jobId, {
+    required String rateType,
+    double? amount,
+    String? message,
+  }) async {
+    final data = await _request('POST', '/jobs/$jobId/offers', {
+      'rate_type': rateType,
+      if (amount != null) 'amount': amount,
+      if (message != null && message.isNotEmpty) 'message': message,
+    }) as Map<String, dynamic>;
+    return JobOffer.fromJson(data);
+  }
+
+  Future<void> acceptJobOffer(String offerId) async {
+    await _request('POST', '/jobs/offers/$offerId/accept', {});
+  }
+
+  Future<void> declineJobOffer(String offerId) async {
+    await _request('POST', '/jobs/offers/$offerId/decline', {});
   }
 
   static SupabaseService get instance => _instance;
