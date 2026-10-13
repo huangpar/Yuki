@@ -13,6 +13,10 @@ import accountRouter from './routes/account.js';
 import jobsRouter from './routes/jobs.js';
 import placesRouter from './routes/places.js';
 import reviewsRouter from './routes/reviews.js';
+import uploadsRouter from './routes/uploads.js';
+import feedbackRouter from './routes/feedback.js';
+import supportRouter from './routes/support.js';
+import adminRouter from './routes/admin.js';
 
 const app = express();
 
@@ -96,6 +100,10 @@ app.use('/api/me', accountRouter);
 app.use('/api/jobs', jobsRouter);
 app.use('/api/places', placesRouter);
 app.use('/api/reviews', reviewsRouter);
+app.use('/api/uploads', uploadsRouter);
+app.use('/api/feedback', feedbackRouter);
+app.use('/api/support', supportRouter);
+app.use('/api/admin', adminRouter);
 
 // 404 handler
 app.use((req, res) => {

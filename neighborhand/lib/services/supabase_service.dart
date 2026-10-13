@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/address_suggestion.dart';
+import '../models/admin_overview.dart';
+import '../models/support_ticket.dart';
 import '../models/customer_booking.dart';
 import '../models/review.dart';
 import '../models/job_post.dart';
@@ -319,12 +322,14 @@ class SupabaseService {
     required List<String> categories,
     required String bio,
     String? externalReviewsUrl,
+    List<String>? photos,
   }) async {
     await _request('PUT', '/providers/profile', {
       'hourly_rate': hourlyRate,
       'categories': categories,
       'bio': bio,
       'external_reviews_url': externalReviewsUrl ?? '',
+      if (photos != null) 'photos': photos,
     });
   }
 
@@ -382,17 +387,136 @@ class SupabaseService {
     required String bookingId,
     required int rating,
     String? comment,
+    List<String> photos = const [],
   }) async {
     await _request('POST', '/reviews', {
       'booking_id': bookingId,
       'rating': rating,
       if (comment != null && comment.isNotEmpty) 'comment': comment,
+      if (photos.isNotEmpty) 'photos': photos,
     });
+  }
+
+  /// Uploads an image and returns the storage path to send with the profile,
+  /// job, or review it belongs to. The bytes go straight to storage through a
+  /// one-shot URL, so they never pass through our API.
+  ///
+  /// [kind] is 'profile', 'job', or 'review'.
+  Future<String> uploadPhoto({
+    required String kind,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final signed = await _request('POST', '/uploads/photo', {
+      'kind': kind,
+      'content_type': contentType,
+    }) as Map<String, dynamic>;
+
+    final response = await http.put(
+      Uri.parse(signed['upload_url'] as String),
+      headers: {'Content-Type': contentType},
+      body: bytes,
+    );
+
+    if (response.statusCode >= 400) {
+      throw ApiException(
+        response.statusCode,
+        'upload_failed',
+        'That photo could not be uploaded. Try another one.',
+      );
+    }
+
+    return signed['path'] as String;
   }
 
   Future<ReviewSummary> getReviewsFor(String profileId) async {
     final data = await _request('GET', '/reviews/for/$profileId') as Map<String, dynamic>;
     return ReviewSummary.fromJson(data);
+  }
+
+  // Feedback and support
+  /// Thoughts about Yuki itself, as opposed to a review of a person.
+  Future<void> sendFeedback({
+    required String category,
+    required String message,
+    String? context,
+  }) async {
+    await _request('POST', '/feedback', {
+      'category': category,
+      'message': message,
+      if (context != null && context.isNotEmpty) 'context': context,
+    });
+  }
+
+  /// Reports a problem, optionally about one booking or job.
+  Future<SupportTicket> reportProblem({
+    required String subjectType,
+    required String category,
+    required String message,
+    String? bookingId,
+    String? jobId,
+  }) async {
+    final data = await _request('POST', '/support/tickets', {
+      'subject_type': subjectType,
+      'category': category,
+      'message': message,
+      if (bookingId != null) 'booking_id': bookingId,
+      if (jobId != null) 'job_id': jobId,
+    }) as Map<String, dynamic>;
+    return SupportTicket.fromJson(data);
+  }
+
+  Future<List<SupportTicket>> getMyTickets() async {
+    final data = await _request('GET', '/support/tickets') as Map<String, dynamic>;
+    return (data['tickets'] as List)
+        .map((t) => SupportTicket.fromJson(t as Map<String, dynamic>))
+        .toList();
+  }
+
+  // Admin
+  Future<AdminOverview> getAdminOverview(String window) async {
+    final data = await _request('GET', '/admin/overview?window=$window') as Map<String, dynamic>;
+    return AdminOverview.fromJson(data);
+  }
+
+  Future<List<FeedbackItem>> getAdminFeedback(String status) async {
+    final data = await _request('GET', '/admin/feedback?status=$status') as Map<String, dynamic>;
+    return (data['feedback'] as List)
+        .map((f) => FeedbackItem.fromJson(f as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> updateFeedback(String feedbackId, {String? status, String? adminNote}) async {
+    await _request('PATCH', '/admin/feedback/$feedbackId', {
+      if (status != null) 'status': status,
+      if (adminNote != null) 'admin_note': adminNote,
+    });
+  }
+
+  Future<List<SupportTicket>> getAdminTickets(String status) async {
+    final data = await _request('GET', '/admin/tickets?status=$status') as Map<String, dynamic>;
+    return (data['tickets'] as List)
+        .map((t) => SupportTicket.fromJson(t as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> updateTicket(String ticketId, {String? status, String? adminNote}) async {
+    await _request('PATCH', '/admin/tickets/$ticketId', {
+      if (status != null) 'status': status,
+      if (adminNote != null) 'admin_note': adminNote,
+    });
+  }
+
+  Future<List<AdminProvider>> getAdminProviders(String verified) async {
+    final data =
+        await _request('GET', '/admin/providers?verified=$verified') as Map<String, dynamic>;
+    return (data['providers'] as List)
+        .map((p) => AdminProvider.fromJson(p as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> setProviderVerification(String providerId, bool verified) async {
+    await _request('POST', '/admin/providers/$providerId/verification', {'verified': verified});
   }
 
   /// Address suggestions while someone types, biased toward [latitude]/[longitude].
@@ -425,6 +549,7 @@ class SupabaseService {
     required double offeredPrice,
     required int openForHours,
     DateTime? scheduledFor,
+    List<String> photos = const [],
   }) async {
     final data = await _request('POST', '/jobs', {
       'service_category': serviceCategory,
@@ -435,6 +560,7 @@ class SupabaseService {
       'estimated_duration_minutes': durationMinutes,
       'offered_price': offeredPrice,
       'open_for_hours': openForHours,
+      if (photos.isNotEmpty) 'photos': photos,
       if (scheduledFor == null) 'asap': true else 'scheduled_for': _isoSeconds(scheduledFor),
     }) as Map<String, dynamic>;
     return JobPost.fromJson(data);

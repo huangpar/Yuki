@@ -1,5 +1,18 @@
 // Request validation schemas for Yuki API endpoints
 
+// Photos arrive as storage paths from /api/uploads/photo; the routes check that
+// each one belongs to the caller before anything is saved.
+function photoList(max) {
+  return {
+    type: 'array',
+    maxItems: max,
+    custom: (value) =>
+      value.every((path) => typeof path === 'string' && path.length <= 200)
+        ? null
+        : 'Invalid photo',
+  };
+}
+
 export const schemas = {
   // Authentication schemas
   signup: {
@@ -196,6 +209,7 @@ export const schemas = {
   },
 
   createJob: {
+    photos: photoList(4),
     service_category: {
       type: 'string',
       required: true,
@@ -287,6 +301,7 @@ export const schemas = {
   },
 
   createReview: {
+    photos: photoList(3),
     booking_id: {
       type: 'uuid',
       required: true,
@@ -304,8 +319,89 @@ export const schemas = {
     },
   },
 
+  // Feedback, support, and admin schemas
+  createFeedback: {
+    category: {
+      type: 'string',
+      required: true,
+      enum: ['idea', 'problem', 'praise', 'other'],
+      sanitize: ['trim', 'lowercase'],
+    },
+    message: {
+      type: 'string',
+      required: true,
+      minLength: 5,
+      maxLength: 2000,
+      sanitize: ['trim'],
+    },
+    // Where they were in the app, so a short note is still actionable.
+    context: {
+      type: 'string',
+      maxLength: 200,
+      sanitize: ['trim'],
+    },
+  },
+
+  updateFeedback: {
+    status: {
+      type: 'string',
+      enum: ['new', 'read', 'resolved'],
+      sanitize: ['trim', 'lowercase'],
+    },
+    admin_note: {
+      type: 'string',
+      maxLength: 1000,
+      sanitize: ['trim'],
+    },
+  },
+
+  createTicket: {
+    subject_type: {
+      type: 'string',
+      required: true,
+      enum: ['booking', 'job', 'account', 'other'],
+      sanitize: ['trim', 'lowercase'],
+    },
+    booking_id: { type: 'uuid' },
+    job_id: { type: 'uuid' },
+    category: {
+      type: 'string',
+      required: true,
+      enum: ['no_show', 'quality', 'payment', 'safety', 'account', 'other'],
+      sanitize: ['trim', 'lowercase'],
+    },
+    message: {
+      type: 'string',
+      required: true,
+      minLength: 5,
+      maxLength: 2000,
+      sanitize: ['trim'],
+    },
+  },
+
+  updateTicket: {
+    status: {
+      type: 'string',
+      enum: ['open', 'in_progress', 'resolved', 'closed'],
+      sanitize: ['trim', 'lowercase'],
+    },
+    admin_note: {
+      type: 'string',
+      maxLength: 1000,
+      sanitize: ['trim'],
+    },
+  },
+
+  setVerification: {
+    verified: {
+      type: 'boolean',
+      required: true,
+    },
+  },
+
   // Provider schemas
   updateProviderProfile: {
+    photos: photoList(6),
     // A provider's own Google or Yelp listing; we link out to it, never copy from it.
     external_reviews_url: {
       type: 'url',

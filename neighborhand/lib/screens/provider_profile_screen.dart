@@ -5,6 +5,7 @@ import '../models/provider_account.dart';
 import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/error_banner.dart';
+import '../widgets/photo_picker.dart';
 import 'home_screen.dart';
 
 class ProviderProfileScreen extends StatefulWidget {
@@ -26,6 +27,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   late final TextEditingController _rateController;
   late final TextEditingController _bioController;
   late final TextEditingController _reviewsUrlController;
+  late List<String> _photoPaths;
+  late Map<String, String> _photoUrls;
   late final Set<String> _categories;
   bool _saving = false;
   String? _error;
@@ -43,6 +46,14 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     _reviewsUrlController =
         TextEditingController(text: widget.account.externalReviewsUrl ?? '');
     _categories = {...widget.account.categories};
+    _photoPaths = [...widget.account.photoPaths];
+    // Photos already saved preview from their public URL; the pairing is by
+    // position, which is how the API returns them.
+    _photoUrls = {
+      for (var i = 0; i < widget.account.photoPaths.length; i++)
+        if (i < widget.account.photos.length)
+          widget.account.photoPaths[i]: widget.account.photos[i],
+    };
   }
 
   @override
@@ -72,6 +83,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         categories: _categories.toList(),
         bio: _bioController.text.trim(),
         externalReviewsUrl: _reviewsUrlController.text.trim(),
+        photos: _photoPaths,
       );
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -188,6 +200,22 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       alignLabelWithHint: true,
                       border: OutlineInputBorder(),
                     ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text('Photos of your work', style: AppTypography.h3),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Customers see these on your card on the map.',
+                    style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  PhotoPicker(
+                    kind: 'profile',
+                    paths: _photoPaths,
+                    urls: _photoUrls,
+                    max: 6,
+                    enabled: !_saving,
+                    onChanged: (paths) => setState(() => _photoPaths = paths),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(

@@ -15,6 +15,10 @@ class ProviderAccount {
   /// A link to their reviews elsewhere (Google, Yelp, their own site).
   final String? externalReviewsUrl;
 
+  /// Work samples, as URLs for showing and paths for saving back.
+  final List<String> photos;
+  final List<String> photoPaths;
+
   ProviderAccount({
     required this.id,
     required this.firstName,
@@ -29,6 +33,8 @@ class ProviderAccount {
     this.rating,
     this.reviewCount = 0,
     this.externalReviewsUrl,
+    this.photos = const [],
+    this.photoPaths = const [],
   });
 
   String get fullName => '$firstName $lastName'.trim();
@@ -50,6 +56,8 @@ class ProviderAccount {
       rating: (json['rating'] as num?)?.toDouble(),
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
       externalReviewsUrl: json['external_reviews_url'] as String?,
+      photos: List<String>.from(json['photos'] as List? ?? const []),
+      photoPaths: List<String>.from(json['photo_paths'] as List? ?? const []),
     );
   }
 }

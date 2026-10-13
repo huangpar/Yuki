@@ -9,6 +9,7 @@ import '../services/supabase_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/rating_stars.dart';
+import '../widgets/report_problem_dialog.dart';
 import '../widgets/review_dialog.dart';
 import 'booking_status_screen.dart';
 
@@ -95,6 +96,18 @@ class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
     }
   }
 
+  Future<void> _report(CustomerBooking booking) async {
+    final sent = await reportProblem(
+      context,
+      subjectType: 'booking',
+      bookingId: booking.id,
+      about: 'your booking with ${booking.providerName ?? 'your provider'}',
+    );
+    if (sent && mounted) {
+      _showMessage('Report sent. You can follow it under My reports.');
+    }
+  }
+
   Future<void> _review(CustomerBooking booking) async {
     final rating = await askForReview(
       context,
@@ -169,6 +182,7 @@ class _CustomerBookingsScreenState extends State<CustomerBookingsScreen> {
           onTap: () => _open(bookings[i]),
           onReview: () => _review(bookings[i]),
           onMarkDone: () => _markDone(bookings[i]),
+          onReport: () => _report(bookings[i]),
           markingDone: _completing.contains(bookings[i].id),
         ),
       ),
@@ -181,6 +195,7 @@ class _BookingTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onReview;
   final VoidCallback onMarkDone;
+  final VoidCallback onReport;
   final bool markingDone;
 
   const _BookingTile({
@@ -188,6 +203,7 @@ class _BookingTile extends StatelessWidget {
     required this.onTap,
     required this.onReview,
     required this.onMarkDone,
+    required this.onReport,
     required this.markingDone,
   });
 
@@ -288,13 +304,19 @@ class _BookingTile extends StatelessWidget {
               if (booking.isComplete) ...[
                 const Divider(height: AppSpacing.lg, color: AppColors.border),
                 booking.canReview
-                    ? Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: onReview,
-                          icon: const Icon(Icons.star_border, size: 18),
-                          label: Text('Rate ${booking.providerName ?? 'your provider'}'),
-                        ),
+                    ? Row(
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: onReview,
+                            icon: const Icon(Icons.star_border, size: 18),
+                            label: Text('Rate ${booking.providerName ?? 'your provider'}'),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: onReport,
+                            child: const Text('Report a problem'),
+                          ),
+                        ],
                       )
                     : Row(
                         children: [
@@ -312,6 +334,10 @@ class _BookingTile extends StatelessWidget {
                           ),
                           const Spacer(),
                           TextButton(onPressed: onReview, child: const Text('Edit')),
+                          TextButton(
+                            onPressed: onReport,
+                            child: const Text('Report a problem'),
+                          ),
                         ],
                       ),
               ],

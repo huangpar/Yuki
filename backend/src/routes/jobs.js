@@ -5,6 +5,7 @@ import { validate } from '../middleware/validation.js';
 import { schemas } from '../validators/schemas.js';
 import { asyncHandler, ApiError } from '../middleware/errorHandler.js';
 import { logger } from '../middleware/logger.js';
+import { signJobPhotos, verifyOwnedPhotos } from '../utils/photos.js';
 
 const router = express.Router();
 
@@ -66,6 +67,7 @@ function shapeJob(job, { offers, distanceMiles } = {}) {
     booking_id: job.booking_id ?? null,
     created_at: job.created_at,
     expires_at: job.expires_at,
+    photos: job.photos ?? [],
     ...(distanceMiles === undefined ? {} : { distance_miles: distanceMiles }),
     ...(offers === undefined
       ? {}
@@ -82,7 +84,8 @@ router.post(
   validate(schemas.createJob),
   asyncHandler(async (req, res) => {
     const customerId = req.user.id;
-    const { asap, scheduled_for, open_for_hours, ...rest } = req.body;
+    const { asap, scheduled_for, open_for_hours, photos, ...rest } = req.body;
+    const ownPhotos = verifyOwnedPhotos(photos, 'job', customerId) ?? [];
 
     if (!asap && !scheduled_for) {
       throw new ApiError('Choose ASAP or a time', 400, 'missing_time');
@@ -94,6 +97,7 @@ router.post(
       .insert([
         {
           ...rest,
+          photos: ownPhotos,
           customer_id: customerId,
           asap: Boolean(asap),
           scheduled_for: asap ? now.toISOString() : scheduled_for,
@@ -110,7 +114,8 @@ router.post(
     }
 
     logger.info('Job posted', { jobId: data[0].id, customerId });
-    res.status(201).json(shapeJob(data[0], { offers: [] }));
+    const [posted] = await signJobPhotos([shapeJob(data[0], { offers: [] })]);
+    res.status(201).json(posted);
   })
 );
 
@@ -131,13 +136,15 @@ router.get(
       throw new ApiError(`Failed to fetch jobs: ${error.message}`, 500);
     }
 
-    res.json({
-      jobs: data.map((job) =>
+    const jobs = await signJobPhotos(
+      data.map((job) =>
         shapeJob(job, {
           offers: (job.job_offers ?? []).filter((o) => o.status !== 'withdrawn'),
         })
-      ),
-    });
+      )
+    );
+
+    res.json({ jobs });
   })
 );
 
@@ -186,8 +193,10 @@ router.get(
         };
       });
 
+    const withPhotos = await signJobPhotos(jobs);
+
     logger.info('Open jobs searched', { providerId, radius, resultsCount: jobs.length });
-    res.json({ jobs, count: jobs.length });
+    res.json({ jobs: withPhotos, count: withPhotos.length });
   })
 );
 
@@ -209,10 +218,19 @@ router.get(
       throw new ApiError(`Failed to fetch offers: ${error.message}`, 500);
     }
 
+    const offers = data.map((offer) => ({
+      ...shapeOffer(offer, offer.job_posts?.estimated_duration_minutes ?? 60),
+      job: offer.job_posts ? shapeJob(offer.job_posts) : null,
+    }));
+    const signed = await signJobPhotos(
+      offers.filter((o) => o.job).map((o) => o.job)
+    );
+    const jobById = new Map(signed.map((job) => [job.job_id, job]));
+
     res.json({
-      offers: data.map((offer) => ({
-        ...shapeOffer(offer, offer.job_posts?.estimated_duration_minutes ?? 60),
-        job: offer.job_posts ? shapeJob(offer.job_posts) : null,
+      offers: offers.map((offer) => ({
+        ...offer,
+        job: offer.job ? jobById.get(offer.job.job_id) : null,
       })),
     });
   })

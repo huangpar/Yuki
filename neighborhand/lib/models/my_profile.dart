@@ -4,6 +4,7 @@ class MyProfile {
   final String? email;
   final String? phone;
   final bool isProvider;
+  final bool isAdmin;
 
   MyProfile({
     required this.firstName,
@@ -11,6 +12,7 @@ class MyProfile {
     this.email,
     this.phone,
     required this.isProvider,
+    this.isAdmin = false,
   });
 
   /// Google and Apple sign-ins arrive without a phone number, and Apple may omit the name.
@@ -23,6 +25,7 @@ class MyProfile {
       email: json['email'] as String?,
       phone: json['phone'] as String?,
       isProvider: json['is_provider'] as bool? ?? false,
+      isAdmin: json['is_admin'] as bool? ?? false,
     );
   }
 }

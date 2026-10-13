@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../constants/service_categories.dart';
 import '../theme/app_theme.dart';
+import '../widgets/photo_strip.dart';
 import '../widgets/rating_stars.dart';
 import 'reviews_screen.dart';
 import '../models/nearby_provider_model.dart';
@@ -633,6 +634,12 @@ class ProviderDetailsSheet extends StatelessWidget {
                 .toList(),
           ),
           SizedBox(height: AppSpacing.md),
+
+          // Work samples
+          if (provider.photos.isNotEmpty) ...[
+            PhotoStrip(urls: provider.photos, size: 84),
+            SizedBox(height: AppSpacing.md),
+          ],
 
           // Bio
           if (provider.bio.isNotEmpty)
